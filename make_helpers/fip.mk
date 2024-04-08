@@ -14,7 +14,7 @@ else
 MONITOR_PATH = ${BUILD_PLAT}/bl31.bin
 BL32_PATH = ${BUILD_PLAT}/bl32.bin
 endif
-BLMCU_PATH = plat/athena2/prebuilt/athena2_mcu_fw.bin
+BLMCU_PATH = plat/cv186x/prebuilt/cv186x_mcu_fw.bin
 else ifeq (${BOOT_CPU},riscv)
 MONITOR_PATH = ../opensbi/build/platform/generic/firmware/fw_dynamic.bin
 endif

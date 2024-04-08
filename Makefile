@@ -8,6 +8,7 @@
 MAKEOVERRIDES =
 
 RELEASE_VER := 1
+CHIP_ARCH=cv186x
 
 include $(BUILD_PATH)/.config
 
@@ -69,14 +70,14 @@ BUILD_PLAT	= ${O}
 
 BUILD_STRING := g$(shell git rev-parse --short HEAD 2> /dev/null)
 BUILD_STRING := ${BUILD_STRING}$(shell if git diff-index --name-only HEAD | grep -q "."; then echo -dirty; fi)
-VERSION_STRING := ${CHIP_ARCH_ALT}:${BUILD_STRING}
+VERSION_STRING := ${CHIP}:${BUILD_STRING}
 
 ifeq ($(CHIP_ARCH),$(filter $(CHIP_ARCH),cv183x ))
 DEFINES += -D__CVITEK__
 # TPU model decryption
 ENABLE_TPU_SECURITY:=1
 BOOTFLOW_TYPE:=0
-else ifeq ($(CHIP_ARCH),$(filter $(CHIP_ARCH),cv182x  cv181x athena2))
+else ifeq ($(CHIP_ARCH),$(filter $(CHIP_ARCH),cv182x  cv181x cv186x))
 DEFINES += -D__CVITEK__
 ENABLE_TPU_SECURITY:=0
 BOOTFLOW_TYPE:=1
