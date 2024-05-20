@@ -8,8 +8,8 @@ CHIP_CONF_PATH = ${BUILD_PLAT}/chip_conf.bin
 
 ifeq (${BOOT_CPU},aarch64)
 ifeq (${RELEASE_VER},1)
-MONITOR_PATH = plat/${CHIP_ARCH}/prebuilt/bl31.bin
-BL32_PATH = plat/${CHIP_ARCH}/prebuilt/bl32.bin
+MONITOR_PATH = plat/${CHIP_ARCH}/bl31.bin
+BL32_PATH = plat/${CHIP_ARCH}/bl32.bin
 else
 MONITOR_PATH = ${BUILD_PLAT}/bl31.bin
 BL32_PATH = ${BUILD_PLAT}/bl32.bin

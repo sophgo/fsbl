@@ -70,7 +70,7 @@ BUILD_PLAT	= ${O}
 
 BUILD_STRING := g$(shell git rev-parse --short HEAD 2> /dev/null)
 BUILD_STRING := ${BUILD_STRING}$(shell if git diff-index --name-only HEAD | grep -q "."; then echo -dirty; fi)
-VERSION_STRING := ${CHIP}:${BUILD_STRING}
+VERSION_STRING := ${CHIP_ARCH_ALT}:${BUILD_STRING}
 
 ifeq ($(CHIP_ARCH),$(filter $(CHIP_ARCH),cv183x ))
 DEFINES += -D__CVITEK__
