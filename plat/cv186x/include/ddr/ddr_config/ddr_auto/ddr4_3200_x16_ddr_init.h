@@ -5063,7 +5063,7 @@ extern uint32_t ddr_data_rate;
 
 void ddrc_init(uintptr_t base);
 void phy_init(uintptr_t base);
-void ctrl_init_high_patch(uintptr_t base, uintptr_t ddr_top_base);
+void ctrl_init_high_patch(uintptr_t base, uintptr_t ddr_top_base, uintptr_t phyd_base_addr);
 void ctrl_init_low_patch(uintptr_t base, uintptr_t ddr_top_base);
 void ctrl_init_update_by_dram_size(uintptr_t base, uint8_t dram_cap_in_mbyte);
 //void ctrl_init_high_patch(void);

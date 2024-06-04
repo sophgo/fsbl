@@ -1060,7 +1060,7 @@ extern uint32_t ddr_data_rate;
 										// param_phyd_pigtlvl_sw_upd_req:[16:16]=0b0   
 										// param_phyd_rx_en_lead_cnt:[25:20]=0b1110
                                         // param_phyd_en_odt_lead_cnt:[31:26]=0b1110
-#define  LP4_4266_x16_DDR_PHY_REG_28_DATA  0b00000000000000000000000100001000
+#define  LP4_4266_x16_DDR_PHY_REG_28_DATA  0b00000000000011110000000100001000
 										// param_phyd_rgtrack_threshold:[4:0]=0b01000   
 										// param_phyd_rgtrack_dly_step:[11:8]=0b0001   
 										// param_phyd_rgtrack_disable:[19:16]=0b0000   
@@ -5433,7 +5433,7 @@ extern uint32_t ddr_data_rate;
 
 void ddrc_init(uintptr_t base);
 void phy_init(uintptr_t base);
-void ctrl_init_high_patch(uintptr_t base, uintptr_t ddr_top_base);
+void ctrl_init_high_patch(uintptr_t base, uintptr_t ddr_top_base, uintptr_t phyd_base_addr);
 void ctrl_init_low_patch(uintptr_t base, uintptr_t ddr_top_base);
 void ctrl_init_update_by_dram_size(uintptr_t base, uint8_t dram_cap_in_mbyte);
 //void ctrl_init_high_patch(void);
