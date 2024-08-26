@@ -114,6 +114,7 @@ void apply_analog_trimming_data(void);
 void sys_pll_init(void);
 void sys_switch_all_to_pll(void);
 
+void rom_api_redirect(void);
 void init_comm_info(void);
 int load_ddr(void);
 int load_rest(void);

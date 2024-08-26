@@ -181,6 +181,7 @@ enum boot_src {
 	BOOT_SRC_SPI_NAND = 0x0 | BOOT_SRC_TAG,
 	BOOT_SRC_SPI_NOR = 0x2 | BOOT_SRC_TAG,
 	BOOT_SRC_EMMC = 0x3 | BOOT_SRC_TAG,
+	BOOT_SRC_RTC_NOR = 0x5 | BOOT_SRC_TAG,
 
 	// Download
 	BOOT_SRC_SD = 0xA0 | BOOT_SRC_TAG,
@@ -440,6 +441,7 @@ extern struct _time_records *time_records;
 #define PWM_START 0x44
 #define PWM_OE 0xD0
 
+#define PCIE_BOOT_REG 0x281000b0
 /*
  * DEBUG register
  */

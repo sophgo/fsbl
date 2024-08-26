@@ -29,6 +29,8 @@ void bl2_main(void)
 
 	print_sram_log();
 
+	rom_api_redirect();
+
 	setup_dl_flag();
 
 	//switch_rtc_mode_1st_stage();

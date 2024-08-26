@@ -80,5 +80,4 @@ SECTIONS
 
     ASSERT(. <= (BL2_BASE + BL2_SIZE), "BL2 image has exceeded its limit.")
 
-    #include <rom_api_refer.h>
 }
