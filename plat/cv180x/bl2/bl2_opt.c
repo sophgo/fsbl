@@ -12,24 +12,63 @@
 #include <bl2.h>
 #include <ddr.h>
 #include <string.h>
+#include <cvi_spinor.h>
 #include <decompress.h>
 #include <delay_timer.h>
 #include <security/security.h>
 #include <cv_usb.h>
+#include <cv_spi_nand.h>
+#include "bl2_2nd_parse.h"
+
+#define TRUE 1
+#define FALSE 0
 
 struct _time_records *time_records = (void *)TIME_RECORDS_ADDR;
 struct fip_param1 *fip_param1 = (void *)PARAM1_BASE;
-static struct fip_param2 fip_param2 __aligned(BLOCK_SIZE);
-static union {
-	struct ddr_param ddr_param;
-	struct loader_2nd_header loader_2nd_header;
-	uint8_t buf[BLOCK_SIZE];
-} sram_union_buf __aligned(BLOCK_SIZE);
+struct fip_param2 fip_param2 __aligned(BLOCK_SIZE);
+extern struct _macros_misc macros_misc;
 
+union SRAMBuffer sram_union_buf;
 int init_comm_info(int ret) __attribute__((weak));
 int init_comm_info(int ret)
 {
 	return ret;
+}
+
+__attribute__((weak)) int bl2_decompress(void *dst, size_t *dst_size,
+					 const void *src, size_t src_size,
+					 enum COMPRESS_TYPE type)
+{
+	int ret;
+	ret = decompress(dst, dst_size, src, src_size, type);
+
+	if (ret < 0) {
+		return -1;
+	}
+
+	return ret;
+}
+
+__attribute__((weak)) int load_kernel(int retry)
+{
+	int ret = -1;
+	void *image_buf = (void *)(uintptr_t)0x80200000;
+	NOTICE("load_kernel jump_LOADADDR2:%x \n", macros_misc.jump_loadaddr);
+
+#ifdef USB_DL_BY_FSBL
+	if (p_rom_api_get_boot_src() == BOOT_SRC_USB)
+		ret = load_image_by_usb(image_buf, macros_misc.jump_loadaddr,
+					macros_misc.jump_loadaddr_size, retry);
+	else
+#endif
+		ret = p_rom_api_load_image(image_buf, macros_misc.jump_loadaddr,
+					   macros_misc.jump_loadaddr_size,
+					   retry);
+	if (ret < 0) {
+		return -1;
+	}
+
+	return 0;
 }
 
 void print_sram_log(void)
@@ -38,8 +77,10 @@ void print_sram_log(void)
 	uint8_t *const log_buf = (void *)phys_to_dma(BOOT_LOG_BUF_BASE);
 	uint32_t i;
 
-	static const char m1[] = "\nSRAM Log: ========================================\n";
-	static const char m2[] = "\nSRAM Log end: ====================================\n";
+	const char m1[] =
+		"\nSRAM Log: ========================================\n";
+	const char m2[] =
+		"\nSRAM Log end: ====================================\n";
 
 	for (i = 0; m1[i]; i++)
 		console_putc(m1[i]);
@@ -51,53 +92,6 @@ void print_sram_log(void)
 		console_putc(m2[i]);
 }
 
-void lock_efuse_chipsn(void)
-{
-	int value = mmio_read_32(EFUSE_W_LOCK0_REG);
-
-	if (efuse_power_on()) {
-		NOTICE("efuse power on fail\n");
-		return;
-	}
-
-	if ((value & (0x1 << BIT_FTSN3_LOCK)) == 0)
-		efuse_program_bit(0x26, BIT_FTSN3_LOCK);
-
-	if ((value & (0x1 << BIT_FTSN4_LOCK)) == 0)
-		efuse_program_bit(0x26, BIT_FTSN4_LOCK);
-
-	if (efuse_refresh_shadow()) {
-		NOTICE("efuse refresh shadow fail\n");
-		return;
-	}
-
-	value = mmio_read_32(EFUSE_W_LOCK0_REG);
-	if (((value & (0x3 << BIT_FTSN3_LOCK)) >> BIT_FTSN3_LOCK) !=  0x3)
-		NOTICE("lock efuse chipsn fail\n");
-
-	if (efuse_power_off()) {
-		NOTICE("efuse power off fail\n");
-		return;
-	}
-}
-
-#ifdef USB_DL_BY_FSBL
-int load_image_by_usb(void *buf, uint32_t offset, size_t image_size, int retry_num)
-{
-
-	int ret = -1;
-
-	if (usb_polling(buf, offset, image_size) == CV_USB_DL)
-		ret = 0;
-	else
-		ret = -2;
-
-	INFO("LIE/%d/%p/0x%x/%lu.\n", ret, buf, offset, image_size);
-
-	return ret;
-}
-#endif
-
 int load_param2(int retry)
 {
 	uint32_t crc;
@@ -107,11 +101,14 @@ int load_param2(int retry)
 
 #ifdef USB_DL_BY_FSBL
 	if (p_rom_api_get_boot_src() == BOOT_SRC_USB)
-		ret = load_image_by_usb(&fip_param2, fip_param1->param2_loadaddr, PARAM2_SIZE, retry);
+		ret = load_image_by_usb(&fip_param2,
+					fip_param1->param2_loadaddr,
+					PARAM2_SIZE, retry);
 	else
 #endif
-		ret = p_rom_api_load_image(&fip_param2, fip_param1->param2_loadaddr, PARAM2_SIZE, retry);
-
+		ret = p_rom_api_load_image(&fip_param2,
+					   fip_param1->param2_loadaddr,
+					   PARAM2_SIZE, retry);
 	if (ret < 0) {
 		return ret;
 	}
@@ -121,9 +118,11 @@ int load_param2(int retry)
 		return -1;
 	}
 
-	crc = p_rom_api_image_crc(&fip_param2.reserved1, sizeof(fip_param2) - 12);
+	crc = p_rom_api_image_crc(&fip_param2.reserved1,
+				  sizeof(fip_param2) - 12);
 	if (crc != fip_param2.param2_cksum) {
-		ERROR("param2_cksum (0x%x/0x%x)\n", crc, fip_param2.param2_cksum);
+		ERROR("param2_cksum (0x%x/0x%x)\n", crc,
+		      fip_param2.param2_cksum);
 		return -1;
 	}
 
@@ -137,26 +136,31 @@ int load_ddr_param(int retry)
 	uint32_t crc;
 	int ret = -1;
 
-	NOTICE("DPS/0x%x/0x%x.\n", fip_param2.ddr_param_loadaddr, fip_param2.ddr_param_size);
+	NOTICE("DPS/0x%x/0x%x.\n", fip_param2.ddr_param_loadaddr,
+	       fip_param2.ddr_param_size);
 
 	if (fip_param2.ddr_param_size >= sizeof(sram_union_buf.ddr_param))
 		fip_param2.ddr_param_size = sizeof(sram_union_buf.ddr_param);
 
 #ifdef USB_DL_BY_FSBL
 	if (p_rom_api_get_boot_src() == BOOT_SRC_USB)
-		ret = load_image_by_usb(&sram_union_buf.ddr_param, fip_param2.ddr_param_loadaddr,
-		fip_param2.ddr_param_size,  retry);
+		ret = load_image_by_usb(&sram_union_buf.ddr_param,
+					fip_param2.ddr_param_loadaddr,
+					fip_param2.ddr_param_size, retry);
 	else
 #endif
-		ret = p_rom_api_load_image(&sram_union_buf.ddr_param, fip_param2.ddr_param_loadaddr,
-		fip_param2.ddr_param_size, retry);
+		ret = p_rom_api_load_image(&sram_union_buf.ddr_param,
+					   fip_param2.ddr_param_loadaddr,
+					   fip_param2.ddr_param_size, retry);
 	if (ret < 0) {
 		return ret;
 	}
 
-	crc = p_rom_api_image_crc(&sram_union_buf.ddr_param, fip_param2.ddr_param_size);
+	crc = p_rom_api_image_crc(&sram_union_buf.ddr_param,
+				  fip_param2.ddr_param_size);
 	if (crc != fip_param2.ddr_param_cksum) {
-		ERROR("ddr_param_cksum (0x%x/0x%x)\n", crc, fip_param2.ddr_param_cksum);
+		ERROR("ddr_param_cksum (0x%x/0x%x)\n", crc,
+		      fip_param2.ddr_param_cksum);
 		return -1;
 	}
 
@@ -201,44 +205,114 @@ retry_from_flash:
 	return 0;
 }
 
+int load_data_from_storage(void *buffer, uint32_t offset, uint32_t size,
+			   int retry)
+{
+	int ret = 0;
+	if (macros_misc.storage_type == BOOT_SRC_SPI_NAND) {
+		static int count = 0;
+		if (!count)
+			get_nand_info();
+
+		count++;
+		ret = cv_spi_nand_read_data(buffer, offset, size);
+	} else if (macros_misc.storage_type == BOOT_SRC_SPI_NOR) {
+#ifdef USB_DL_BY_FSBL
+		if (p_rom_api_get_boot_src() == BOOT_SRC_USB)
+			ret = load_image_by_usb(buffer, offset, size, retry);
+		else
+#endif
+			ret = p_rom_api_load_image(buffer, offset, size, retry);
+	} else {
+		ERROR("unsupport boot from emmc\n");
+	}
+
+	return ret;
+}
+
 int load_blcp_2nd(int retry)
 {
-	uint32_t crc, rtos_base;
+	uint32_t rtos_base;
 	int ret = -1;
+	size_t dst_size = macros_misc.decomp_dts_size;
+	uint32_t load_pos_com;
+	uint32_t part_offset_2nd;
+	uint32_t header_size_2nd = 0;
+
+	part_offset_2nd = macros_misc.blcp_2nd_loadaddr;
+
+	if (macros_misc.blcp_2nd_comp_bin_addr > 0) {
+		load_pos_com = macros_misc.blcp_2nd_comp_bin_addr;
+	} else {
+		load_pos_com = fip_param2.blcp_2nd_runaddr;
+	}
 
 	// if no blcp_2nd, release_blcp_2nd should be ddr_init_end
 	time_records->release_blcp_2nd = time_records->ddr_init_end;
-
-	NOTICE("C2S/0x%x/0x%x/0x%x.\n", fip_param2.blcp_2nd_loadaddr, fip_param2.blcp_2nd_runaddr,
-	       fip_param2.blcp_2nd_size);
 
 	if (!fip_param2.blcp_2nd_runaddr) {
 		NOTICE("No C906L image.\n");
 		return 0;
 	}
 
-	if (!IN_RANGE(fip_param2.blcp_2nd_runaddr, DRAM_BASE, DRAM_SIZE)) {
-		ERROR("blcp_2nd_runaddr (0x%x) is not in DRAM.\n", fip_param2.blcp_2nd_runaddr);
+	if (!IN_RANGE(fip_param2.blcp_2nd_runaddr, macros_misc.dram_base,
+		      macros_misc.dram_size)) {
+		ERROR("blcp_2nd_runaddr (0x%x) is not in DRAM.\n",
+		      fip_param2.blcp_2nd_runaddr);
 		panic_handler();
 	}
 
-	if (!IN_RANGE(fip_param2.blcp_2nd_runaddr + fip_param2.blcp_2nd_size, DRAM_BASE, DRAM_SIZE)) {
-		ERROR("blcp_2nd_size (0x%x) is not in DRAM.\n", fip_param2.blcp_2nd_size);
+	struct head *header_2nd_ptr = get_head_2nd();
+	if (header_2nd_ptr != NULL) {
+		// get 2nd header
+		header_size_2nd = sizeof(struct head);
+		ret = load_data_from_storage((void *)header_2nd_ptr,
+					     part_offset_2nd, header_size_2nd,
+					     retry);
+		if (ret < 0) {
+			ERROR("error: load header, ret=0x%x\n", ret);
+			goto exit;
+		}
+		if (header_verify_2nd()) {
+			goto exit;
+		}
+		fip_param2.blcp_2nd_size = header_2nd_ptr->file_sz;
+	} else {
+		fip_param2.blcp_2nd_size = SECEND_SIZE;
+	}
+
+	NOTICE("\t load_pos:%x, part_offset_2nd:%x, size:%x\n", load_pos_com,
+	       part_offset_2nd, fip_param2.blcp_2nd_size);
+
+	if (!IN_RANGE(fip_param2.blcp_2nd_runaddr + fip_param2.blcp_2nd_size +
+			      header_size_2nd,
+		      macros_misc.dram_base, macros_misc.dram_size)) {
+		ERROR("blcp_2nd_size (0x%x) is not in DRAM.\n",
+		      fip_param2.blcp_2nd_size);
 		panic_handler();
 	}
 
-#ifdef USB_DL_BY_FSBL
-	if (p_rom_api_get_boot_src() == BOOT_SRC_USB)
-		ret = load_image_by_usb((void *)(uintptr_t)fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_loadaddr,
-					fip_param2.blcp_2nd_size, retry);
-	else
-#endif
-		ret = p_rom_api_load_image((void *)(uintptr_t)fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_loadaddr,
-					fip_param2.blcp_2nd_size, retry);
+	// get alios body
+	ret = load_data_from_storage((void *)(uintptr_t)load_pos_com,
+				     (part_offset_2nd + header_size_2nd),
+				     fip_param2.blcp_2nd_size, retry);
 	if (ret < 0) {
-		return ret;
+		goto exit;
 	}
 
+	if (header_2nd_ptr != NULL) {
+		if (verify_2nd((uint8_t *)(uintptr_t)(load_pos_com))) {
+			goto exit;
+		}
+	}
+	uint64_t data = *(uint64_t *)(uintptr_t)(load_pos_com);
+	NOTICE("\nthe first 8 bytes data of yoc is:0x%lx\n", data);
+
+	ret = bl2_decompress((void *)(uintptr_t)fip_param2.blcp_2nd_runaddr,
+			     &dst_size, (void *)(uintptr_t)(load_pos_com),
+			     (size_t)fip_param2.blcp_2nd_size, COMP_LZMA);
+
+	/*
 	crc = p_rom_api_image_crc((void *)(uintptr_t)fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_size);
 	if (crc != fip_param2.blcp_2nd_cksum) {
 		ERROR("blcp_2nd_cksum (0x%x/0x%x)\n", crc, fip_param2.blcp_2nd_cksum);
@@ -250,8 +324,8 @@ int load_blcp_2nd(int retry)
 		ERROR("verify blcp 2nd (%d)\n", ret);
 		return ret;
 	}
-
-	flush_dcache_range(fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_size);
+*/
+	flush_dcache_range(fip_param2.blcp_2nd_runaddr, dst_size);
 
 	rtos_base = mmio_read_32(AXI_SRAM_RTOS_BASE);
 	init_comm_info(0);
@@ -264,56 +338,138 @@ int load_blcp_2nd(int retry)
 	}
 
 	NOTICE("C2E.\n");
+	set_boot_flag_2nd(0);
+	return 0;
+
+exit:
+	set_boot_flag_2nd(1);
+	ERROR("The mirror is bad\n");
+	return -1;
+}
+
+int load_user_param_and_logo(int retry)
+{
+	int ret = -1;
+
+	NOTICE("UPS/0x%x/0x%x/0x%x/0x%x/0x%x/0x%x/0x%x/0x%x/.\n",
+	       macros_misc.bl_param_runaddr, macros_misc.bl_param_loadaddr,
+	       macros_misc.bl_param_bak_runaddr,
+	       macros_misc.bl_param_bak_loadaddr, macros_misc.bl_param_size,
+	       macros_misc.bl_logo_runaddr, macros_misc.bl_logo_loadaddr,
+	       macros_misc.bl_logo_size);
+
+	if (macros_misc.bl_param_size) {
+		ret = load_data_from_storage(
+			(void *)(long int)macros_misc.bl_param_runaddr,
+			macros_misc.bl_param_loadaddr,
+			macros_misc.bl_param_size, retry);
+		if (ret < 0) {
+			return ret;
+		}
+		flush_dcache_range(macros_misc.bl_param_runaddr,
+				   macros_misc.bl_param_size);
+	}
+
+	if (macros_misc.bl_param_bak_runaddr) {
+		ret = load_data_from_storage(
+			(void *)(long int)macros_misc.bl_param_bak_runaddr,
+			macros_misc.bl_param_bak_loadaddr,
+			macros_misc.bl_param_size, retry);
+		if (ret < 0) {
+			return ret;
+		}
+		flush_dcache_range(macros_misc.bl_param_bak_runaddr,
+				   macros_misc.bl_param_size);
+	}
+
+	if (macros_misc.bl_logo_size) {
+		ret = load_data_from_storage(
+			(void *)(long int)macros_misc.bl_logo_runaddr,
+			macros_misc.bl_logo_loadaddr, macros_misc.bl_logo_size,
+			retry);
+		if (ret < 0) {
+			return ret;
+		}
+		flush_dcache_range(macros_misc.bl_logo_runaddr,
+				   macros_misc.bl_logo_size);
+	}
+
+	if (macros_misc.bl_pq_size) {
+		NOTICE("runddr:0x%x offset:0x%x, len:0x%x\n",
+		       macros_misc.bl_pq_runaddr, macros_misc.bl_pq_loadaddr,
+		       macros_misc.bl_pq_size);
+		ret = load_data_from_storage(
+			(void *)(long int)macros_misc.bl_pq_runaddr,
+			macros_misc.bl_pq_loadaddr, macros_misc.bl_pq_size,
+			retry);
+		if (ret < 0) {
+			return ret;
+		}
+		flush_dcache_range(macros_misc.bl_pq_runaddr,
+				   macros_misc.bl_pq_size);
+		uint32_t data =
+			*(uint32_t *)(uintptr_t)macros_misc.bl_pq_runaddr;
+		NOTICE("the first 4 bytes data of pq is:0x%x\n", data);
+	}
+	NOTICE("UPE.\n");
 
 	return 0;
 }
 
 int load_monitor(int retry, uint64_t *monitor_entry)
 {
-	uint32_t crc;
+	// uint32_t crc;
 	int ret = -1;
 
-	NOTICE("MS/0x%x/0x%x/0x%x.\n", fip_param2.monitor_loadaddr, fip_param2.monitor_runaddr,
-	       fip_param2.monitor_size);
+	NOTICE("MS/0x%x/0x%x/0x%x.\n", fip_param2.monitor_loadaddr,
+	       fip_param2.monitor_runaddr, fip_param2.monitor_size);
 
 	if (!fip_param2.monitor_runaddr) {
 		NOTICE("No monitor.\n");
 		return 0;
 	}
 
-	if (!IN_RANGE(fip_param2.monitor_runaddr, DRAM_BASE, DRAM_SIZE)) {
-		ERROR("monitor_runaddr (0x%x) is not in DRAM.\n", fip_param2.monitor_runaddr);
+	if (!IN_RANGE(fip_param2.monitor_runaddr, macros_misc.dram_base,
+		      macros_misc.dram_size)) {
+		ERROR("monitor_runaddr (0x%x) is not in DRAM.\n",
+		      fip_param2.monitor_runaddr);
 		panic_handler();
 	}
 
-	if (!IN_RANGE(fip_param2.monitor_runaddr + fip_param2.monitor_size, DRAM_BASE, DRAM_SIZE)) {
-		ERROR("monitor_size (0x%x) is not in DRAM.\n", fip_param2.monitor_size);
+	if (!IN_RANGE(fip_param2.monitor_runaddr + fip_param2.monitor_size,
+		      macros_misc.dram_base, macros_misc.dram_size)) {
+		ERROR("monitor_size (0x%x) is not in DRAM.\n",
+		      fip_param2.monitor_size);
 		panic_handler();
 	}
 
 #ifdef USB_DL_BY_FSBL
 	if (p_rom_api_get_boot_src() == BOOT_SRC_USB)
-		ret = load_image_by_usb((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_loadaddr,
-					fip_param2.monitor_size, retry);
+		ret = load_image_by_usb(
+			(void *)(uintptr_t)fip_param2.monitor_runaddr,
+			fip_param2.monitor_loadaddr, fip_param2.monitor_size,
+			retry);
 	else
 #endif
-		ret = p_rom_api_load_image((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_loadaddr,
-					fip_param2.monitor_size, retry);
+		ret = p_rom_api_load_image(
+			(void *)(uintptr_t)fip_param2.monitor_runaddr,
+			fip_param2.monitor_loadaddr, fip_param2.monitor_size,
+			retry);
 	if (ret < 0) {
 		return ret;
 	}
 
-	crc = p_rom_api_image_crc((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_size);
-	if (crc != fip_param2.monitor_cksum) {
-		ERROR("monitor_cksum (0x%x/0x%x)\n", crc, fip_param2.monitor_cksum);
-		return -1;
-	}
+	// crc = p_rom_api_image_crc((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_size);
+	// if (crc != fip_param2.monitor_cksum) {
+	// 	ERROR("monitor_cksum (0x%x/0x%x)\n", crc, fip_param2.monitor_cksum);
+	// 	return -1;
+	// }
 
-	ret = dec_verify_image((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_size, 0, fip_param1);
-	if (ret < 0) {
-		ERROR("verify monitor (%d)\n", ret);
-		return ret;
-	}
+	// ret = dec_verify_image((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_size, 0, fip_param1);
+	// if (ret < 0) {
+	// 	ERROR("verify monitor (%d)\n", ret);
+	// 	return ret;
+	// }
 
 	flush_dcache_range(fip_param2.monitor_runaddr, fip_param2.monitor_size);
 	NOTICE("ME.\n");
@@ -323,13 +479,14 @@ int load_monitor(int retry, uint64_t *monitor_entry)
 	return 0;
 }
 
-int load_loader_2nd(int retry, uint64_t *loader_2nd_entry)
+__attribute__((weak)) int load_loader_2nd(int retry, uint64_t *loader_2nd_entry)
 {
-	struct loader_2nd_header *loader_2nd_header = &sram_union_buf.loader_2nd_header;
+	struct loader_2nd_header *loader_2nd_header =
+		&sram_union_buf.loader_2nd_header;
 	uint32_t crc;
 	int ret = -1;
-	const int cksum_offset =
-		offsetof(struct loader_2nd_header, cksum) + sizeof(((struct loader_2nd_header *)0)->cksum);
+	const int cksum_offset = offsetof(struct loader_2nd_header, cksum) +
+				 sizeof(((struct loader_2nd_header *)0)->cksum);
 
 	enum COMPRESS_TYPE comp_type = COMP_NONE;
 	int reading_size;
@@ -339,18 +496,23 @@ int load_loader_2nd(int retry, uint64_t *loader_2nd_entry)
 
 #ifdef USB_DL_BY_FSBL
 	if (p_rom_api_get_boot_src() == BOOT_SRC_USB)
-		ret = load_image_by_usb(loader_2nd_header, fip_param2.loader_2nd_loadaddr, BLOCK_SIZE, retry);
+		ret = load_image_by_usb(loader_2nd_header,
+					fip_param2.loader_2nd_loadaddr,
+					BLOCK_SIZE, retry);
 	else
 #endif
-		ret = p_rom_api_load_image(loader_2nd_header, fip_param2.loader_2nd_loadaddr, BLOCK_SIZE, retry);
+		ret = p_rom_api_load_image(loader_2nd_header,
+					   fip_param2.loader_2nd_loadaddr,
+					   BLOCK_SIZE, retry);
 	if (ret < 0) {
 		return -1;
 	}
 
 	reading_size = ROUND_UP(loader_2nd_header->size, BLOCK_SIZE);
 
-	NOTICE("L2/0x%x/0x%x/0x%lx/0x%x/0x%x\n", loader_2nd_header->magic, loader_2nd_header->cksum,
-	       loader_2nd_header->runaddr, loader_2nd_header->size, reading_size);
+	NOTICE("L2/0x%x/0x%x/0x%lx/0x%x/0x%x\n", loader_2nd_header->magic,
+	       loader_2nd_header->cksum, loader_2nd_header->runaddr,
+	       loader_2nd_header->size, reading_size);
 
 	switch (loader_2nd_header->magic) {
 	case LOADER_2ND_MAGIC_LZMA:
@@ -366,29 +528,38 @@ int load_loader_2nd(int retry, uint64_t *loader_2nd_entry)
 
 	if (comp_type) {
 		NOTICE("COMP/%d.\n", comp_type);
-		image_buf = (void *)DECOMP_BUF_ADDR;
+		image_buf = (void *)(uintptr_t)macros_misc.bl_decomp_buf_addr;
+		;
 	} else {
 		image_buf = (void *)loader_2nd_header->runaddr;
 	}
 
 #ifdef USB_DL_BY_FSBL
 	if (p_rom_api_get_boot_src() == BOOT_SRC_USB)
-		ret = load_image_by_usb(image_buf, fip_param2.loader_2nd_loadaddr, reading_size, retry);
+		ret = load_image_by_usb(image_buf,
+					fip_param2.loader_2nd_loadaddr,
+					reading_size, retry);
 	else
 #endif
-		ret = p_rom_api_load_image(image_buf, fip_param2.loader_2nd_loadaddr, reading_size, retry);
+		ret = p_rom_api_load_image(image_buf,
+					   fip_param2.loader_2nd_loadaddr,
+					   reading_size, retry);
 	if (ret < 0) {
 		return -1;
 	}
 
-	crc = p_rom_api_image_crc(image_buf + cksum_offset, loader_2nd_header->size - cksum_offset);
+	crc = p_rom_api_image_crc(image_buf + cksum_offset,
+				  loader_2nd_header->size - cksum_offset);
 	if (crc != loader_2nd_header->cksum) {
-		ERROR("loader_2nd_cksum (0x%x/0x%x)\n", crc, loader_2nd_header->cksum);
+		ERROR("loader_2nd_cksum (0x%x/0x%x)\n", crc,
+		      loader_2nd_header->cksum);
 		return -1;
 	}
 
-	ret = dec_verify_image(image_buf + cksum_offset, loader_2nd_header->size - cksum_offset,
-			       sizeof(struct loader_2nd_header) - cksum_offset, fip_param1);
+	ret = dec_verify_image(image_buf + cksum_offset,
+			       loader_2nd_header->size - cksum_offset,
+			       sizeof(struct loader_2nd_header) - cksum_offset,
+			       fip_param1);
 	if (ret < 0) {
 		ERROR("verify loader 2nd (%d)\n", ret);
 		return ret;
@@ -408,10 +579,12 @@ int load_loader_2nd(int retry, uint64_t *loader_2nd_entry)
 		memcpy(dst, image_buf, sizeof(struct loader_2nd_header));
 		image_buf += sizeof(struct loader_2nd_header);
 
-		ret = decompress(dst + sizeof(struct loader_2nd_header), &dst_size, image_buf, loader_2nd_header->size,
+		ret = decompress(dst + sizeof(struct loader_2nd_header),
+				 &dst_size, image_buf, loader_2nd_header->size,
 				 comp_type);
 		if (ret < 0) {
-			ERROR("Failed to decompress loader_2nd (%d/%lu)\n", ret, dst_size);
+			ERROR("Failed to decompress loader_2nd (%d/%lu)\n", ret,
+			      dst_size);
 			return -1;
 		}
 
@@ -422,7 +595,8 @@ int load_loader_2nd(int retry, uint64_t *loader_2nd_entry)
 	time_records->fsbl_decomp_end = read_time_ms();
 	NOTICE("Loader_2nd loaded.\n");
 
-	*loader_2nd_entry = loader_2nd_header->runaddr + sizeof(struct loader_2nd_header);
+	*loader_2nd_entry =
+		loader_2nd_header->runaddr + sizeof(struct loader_2nd_header);
 
 	return 0;
 }
@@ -437,15 +611,25 @@ int load_rest(void)
 	sys_pll_init();
 
 retry_from_flash:
+	// Small hart boot failure does not affect large hart boot
 	for (retry = 0; retry < p_rom_api_get_number_of_retries(); retry++) {
-		if (load_blcp_2nd(retry) < 0)
-			continue;
+		if (p_rom_api_get_boot_src() != BOOT_SRC_USB) {
+			if (load_user_param_and_logo(retry) < 0)
+				continue;
 
+			if (load_blcp_2nd(retry) < 0)
+				continue;
+		}
+		break;
+	}
+	for (retry = 0; retry < p_rom_api_get_number_of_retries(); retry++) {
 		if (load_monitor(retry, &monitor_entry) < 0)
 			continue;
 
-		if (load_loader_2nd(retry, &loader_2nd_entry) < 0)
-			continue;
+		if (load_kernel(retry) == 1) {
+			if (load_loader_2nd(retry, &loader_2nd_entry) < 0)
+				continue;
+		}
 
 		break;
 	}
@@ -480,7 +664,6 @@ retry_from_flash:
 
 	return 0;
 }
-
 int load_rest_od_sel(void)
 {
 	int retry = 0;
@@ -489,17 +672,32 @@ int load_rest_od_sel(void)
 
 	// Init sys PLL and switch clocks to PLL
 	sys_pll_init_od_sel();
+#ifdef IMPROVE_AXI_CLK
+	// set hsperi clock to PLL (FPLL) div by 3  = 500MHz
+	mmio_write_32(0x030020B8, 0x00030009); //--> CLK_AXI4
+#endif
 
 retry_from_flash:
+	// Small hart boot failure does not affect large hart boot
 	for (retry = 0; retry < p_rom_api_get_number_of_retries(); retry++) {
-		if (load_blcp_2nd(retry) < 0)
-			continue;
+		if (p_rom_api_get_boot_src() != BOOT_SRC_USB) {
+			if (load_user_param_and_logo(retry) < 0)
+				continue;
 
+			if (load_blcp_2nd(retry) < 0)
+				continue;
+		}
+		break;
+	}
+
+	for (retry = 0; retry < p_rom_api_get_number_of_retries(); retry++) {
 		if (load_monitor(retry, &monitor_entry) < 0)
 			continue;
 
-		if (load_loader_2nd(retry, &loader_2nd_entry) < 0)
-			continue;
+		if (load_kernel(retry) == 1) {
+			if (load_loader_2nd(retry, &loader_2nd_entry) < 0)
+				continue;
+		}
 
 		break;
 	}
@@ -518,7 +716,10 @@ retry_from_flash:
 			panic_handler();
 		}
 	}
-
+#ifdef IMPROVE_AXI_CLK
+	// set hsperi clock to PLL (FPLL) div by 5  = 300MHz
+	mmio_write_32(0x030020B8, 0x00050009); //--> CLK_AXI4
+#endif
 	sync_cache();
 	console_flush();
 

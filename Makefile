@@ -7,6 +7,11 @@
 # usage. Other command line options like "-s" are still propagated as usual.
 MAKEOVERRIDES =
 
+ifneq ($(wildcard $(BUILD_PATH)/.config),)
+include $(BUILD_PATH)/.config
+endif
+
+
 S := $(shell printf '\033[1;34;40m  MAKECMDGOALS %s \033[0m\n' '${MAKECMDGOALS}')
 $(info ${S})
 
@@ -31,14 +36,17 @@ ifeq (${CROSS_COMPILE},)
 $(error CROSS_COMPILE is undefined)
 endif
 
+
+
+
 ################################################################################
 # Default values for build configurations, and their dependencies
 ################################################################################
 MAKE_HELPERS_DIRECTORY := make_helpers/
 
-V ?= 1
+V ?= 0
 DEBUG := 0
-LOG_LEVEL := 2
+LOG_LEVEL := 5
 ENABLE_ASSERTIONS := 1
 PRINTF_TIMESTAMP := 0
 
@@ -131,6 +139,22 @@ include lib/cpu/${BOOT_CPU}/cpu.mk
 INCLUDES += -Ibuild
 INCLUDES += -Iinclude/cpu
 
+ifeq (${STORAGE_TYPE},spinand)
+$(eval $(call add_define,BOOT_FROM_NAND))
+endif
+ifeq (${STORAGE_TYPE},emmc)
+$(eval $(call add_define,BOOT_FROM_EMMC))
+endif
+ifeq (${STORAGE_TYPE},spinor)
+$(eval $(call add_define,BOOT_FROM_NOR))
+endif
+ifeq (${DOUBLESDK},y)
+$(eval $(call add_define,DOUBLESDK))
+$(eval $(call add_define_val,RTOS_DUMP_PRINT_SZ_IDX,17))
+$(eval $(call add_define_val,RTOS_FAST_IMAGE_TYPE,0))
+$(eval $(call add_define_val,RTOS_DUMP_PRINT_ENABLE,$(call yn10,${RTOS_DUMP_PRINT_ENABLE})))
+endif
+
 ################################################################################
 # Build options checks
 ################################################################################
@@ -150,6 +174,10 @@ $(eval $(call assert_boolean,PRINTF_TIMESTAMP))
 $(call print_var,TEST_FROM_SPINOR1)
 $(call print_var,PAGE_SIZE_64KB)
 
+ifeq (${FORCE_BOOT_FROM_FLASH},y)
+$(eval $(call add_define,FORCE_BOOT_FROM_FLASH))
+endif
+
 $(eval $(call add_define,TEST_FROM_SPINOR1))
 $(eval $(call add_define,PAGE_SIZE_64KB))
 $(eval $(call add_define,PRINTF_TIMESTAMP))
@@ -162,6 +190,7 @@ $(eval $(call add_define,NANDBOOT_V2))
 ifeq (${BOOT_CPU},riscv)
 $(eval $(call add_define_val,TOC_HEADER_NAME,0xC906B001))
 else
+$(eval $(call add_define,ADD_BL32))
 $(eval $(call add_define_val,TOC_HEADER_NAME,0xAA640001))
 endif
 
@@ -172,8 +201,28 @@ $(eval $(call add_define_val,RTOS_FAST_IMAGE_TYPE,${RTOS_FAST_IMAGE_TYPE}))
 $(eval $(call add_define_val,RTOS_DUMP_PRINT_ENABLE,$(call yn10,${RTOS_DUMP_PRINT_ENABLE})))
 endif
 
+ifeq (${CONFIG_MIRROR_2ND_PACK_HEAD},y)
+$(eval $(call add_define,MIRROR_2ND_PACK_HEAD))
+endif
+
+ifeq (${COMPRESS_RTOS_BIN},y)
+$(eval $(call add_define,COMPRESS_RTOS_BIN))
+endif
+
 ifeq ($(OD_CLK_SEL),y)
 $(eval $(call add_define,OD_CLK_SEL))
+endif
+
+ifeq ($(IMPROVE_AXI_CLK),y)
+$(eval $(call add_define,IMPROVE_AXI_CLK))
+endif
+
+ifeq (${CONFIG_SKIP_UBOOT},y)
+$(eval $(call add_define,CONFIG_SKIP_UBOOT))
+endif
+
+ifeq (${CONFIG_MMC_SKIP_TUNING},y)
+$(eval $(call add_define,CONFIG_MMC_SKIP_TUNING))
 endif
 
 $(eval $(call add_define,FSBL_SECURE_BOOT_SUPPORT))

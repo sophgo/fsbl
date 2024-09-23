@@ -121,9 +121,9 @@ void config_core_power(uint32_t low_period)
 	 */
 	mmio_write_32(PWM0_BASE + PWM_HLPERIOD0, low_period);
 	mmio_write_32(PWM0_BASE + PWM_PERIOD0, 0x64);
-	mmio_write_32(PINMUX_BASE + 0xA4, 0x0); // set pinmux for pwm0
-	mmio_write_32(PWM0_BASE + PWM_START, 0x1); // enable bit0:pwm0
-	mmio_write_32(PWM0_BASE + PWM_OE, 0x1); // output enable bit0:pwm0
+	mmio_write_32(PINMUX_BASE + 0xEC, 0x0); // set pinmux for pwm0
+	mmio_write_32(PWM0_BASE + PWM_START, 0x1); // enable bit0:pwm0 and bit3:pwm3
+	mmio_write_32(PWM0_BASE + PWM_OE, 0x1); // output enable bit0:pwm0 and bit3:pwm3
 	mdelay(10);
 }
 
@@ -134,8 +134,7 @@ void sys_switch_all_to_pll(void)
 	mmio_write_32(0x03002034, 0x0); // REG_CLK_BYPASS_SEL1_REG
 }
 
-// #ifdef OD_CLK_SEL
-void sys_pll_od(void)
+void sys_pll_init_od_sel(void)
 {
 	// OD clk setting
 	uint32_t value;
@@ -197,10 +196,6 @@ void sys_pll_od(void)
 	// set mpll = 1050MHz
 	mmio_write_32(0x03002908, 0x05548101);
 
-	// set clk_sel_23: [23] clk_sel for clk_c906_0 = 1 (DIV_IN0_SRC_MUX)
-	// set clk_sel_24: [24] clk_sel for clk_c906_1 = 1 (DIV_IN0_SRC_MUX)
-	mmio_write_32(0x03002020, 0x01800000);
-
 	// set div, src_mux of clk_c906_0: [20:16]div_factor=1, [9:8]clk_src = 3 (mpll), 1050/1 = 1050MHz
 	mmio_write_32(0x03002130, 0x00010309);
 
@@ -209,9 +204,6 @@ void sys_pll_od(void)
 #else
 	// set mpll = 1000MHz
 	mmio_write_32(0x03002908, 0x05508101);
-
-	// set clk_sel_0: [0] clk_sel for clk_a53 = 1 (DIV_IN0_SRC_MUX)
-	mmio_write_32(0x03002020, 0x00000001);
 
 	// set div, src_mux of clk_a53: [20:16]div_factor=1, [9:8]clk_src = 3 (mpll)
 	mmio_write_32(0x03002040, 0x00010309);
@@ -251,6 +243,15 @@ void sys_pll_od(void)
 	//wait for pll stable
 	udelay(200);
 
+#ifdef __riscv
+	// set clk_sel_23: [23] clk_sel for clk_c906_0 = 1 (DIV_IN0_SRC_MUX)
+	// set clk_sel_24: [24] clk_sel for clk_c906_1 = 1 (DIV_IN0_SRC_MUX)
+	mmio_write_32(0x03002020, 0x01800000);
+#else
+	// set clk_sel_0: [0] clk_sel for clk_a53 = 1 (DIV_IN0_SRC_MUX)
+	mmio_write_32(0x03002020, 0x00000001);
+#endif
+
 	// switch clock to PLL from xtal except clk_axi4 & clk_spi_nand
 	byp0_value &= (1 << 8 | //clk_spi_nand
 		       1 << 19 //clk_axi4
@@ -258,9 +259,8 @@ void sys_pll_od(void)
 	mmio_write_32(0x03002030, byp0_value); // REG_CLK_BYPASS_SEL0_REG
 	mmio_write_32(0x03002034, 0x0); // REG_CLK_BYPASS_SEL1_REG
 }
-// #endif
 
-void sys_pll_nd(void)
+void sys_pll_init(void)
 {
 	// ND clk setting
 	uint32_t value;
@@ -317,10 +317,6 @@ void sys_pll_nd(void)
 	// set mpll = 850MHz
 	mmio_write_32(0x03002908, 0x00448101);
 
-	// set clk_sel_23: [23] clk_sel for clk_c906_0 = 1 (DIV_IN0_SRC_MUX)
-	// set clk_sel_24: [24] clk_sel for clk_c906_1 = 1 (DIV_IN0_SRC_MUX)
-	mmio_write_32(0x03002020, 0x01800000);
-
 	// set div, src_mux of clk_c906_0: [20:16]div_factor=1, [9:8]clk_src = 3 (mpll), 850/1 = 850MHz
 	mmio_write_32(0x03002130, 0x00010309);
 
@@ -329,9 +325,6 @@ void sys_pll_nd(void)
 #else
 	// set mpll = 800MHz
 	mmio_write_32(0x03002908, 0x00408101);
-
-	// set clk_sel_0: [0] clk_sel for clk_a53 = 1 (DIV_IN0_SRC_MUX)
-	mmio_write_32(0x03002020, 0x00000001);
 
 	// set div, src_mux of clk_a53: [20:16]div_factor=1, [9:8]clk_src = 3 (mpll)
 	mmio_write_32(0x03002040, 0x00010309);
@@ -371,37 +364,21 @@ void sys_pll_nd(void)
 	//wait for pll stable
 	udelay(200);
 
+#ifdef __riscv
+	// set clk_sel_23: [23] clk_sel for clk_c906_0 = 1 (DIV_IN0_SRC_MUX)
+	// set clk_sel_24: [24] clk_sel for clk_c906_1 = 1 (DIV_IN0_SRC_MUX)
+	mmio_write_32(0x03002020, 0x01800000);
+#else
+	// set clk_sel_0: [0] clk_sel for clk_a53 = 1 (DIV_IN0_SRC_MUX)
+	mmio_write_32(0x03002020, 0x00000001);
+#endif
+
 	// switch clock to PLL from xtal except clk_axi4 & clk_spi_nand
 	byp0_value &= (1 << 8 | //clk_spi_nand
 		       1 << 19 //clk_axi4
 	);
 	mmio_write_32(0x03002030, byp0_value); // REG_CLK_BYPASS_SEL0_REG
 	mmio_write_32(0x03002034, 0x0); // REG_CLK_BYPASS_SEL1_REG
-}
-
-void sys_pll_init(void)
-{
-	sys_pll_nd();
-	NOTICE("PLLE.\n");
-}
-
-void sys_pll_init_od_sel(void)
-{
-	uint8_t pkg = get_pkg();
-
-	switch (pkg) {
-	case PKG_QFN88:
-		NOTICE("pkg QFN88\n");
-		sys_pll_od();
-		break;
-	case PKG_QFN68:
-		NOTICE("QFN68: OD UNSUPPORTED!\n");
-		sys_pll_nd();
-		break;
-	default:
-		NOTICE("unknown pkg=%d\n", pkg);
-		sys_pll_od();
-	}
 	NOTICE("PLLE.\n");
 }
 
@@ -464,4 +441,51 @@ void set_rtc_en_registers(void)
 
 void apply_analog_trimming_data(void)
 {
+}
+
+void cv180x_ephy_id_init(void)
+{
+	// set rg_ephy_apb_rw_sel 0x0804@[0]=1/APB by using APB interface
+	mmio_write_32(0x03009804, 0x0001);
+
+	// Release 0x0800[0]=0/shutdown
+	mmio_write_32(0x03009800, 0x0900);
+
+	// Release 0x0800[2]=1/dig_rst_n, Let mii_reg can be accessabile
+	mmio_write_32(0x03009800, 0x0904);
+
+	// ANA INIT (PD/EN), switch to MII-page5
+	mmio_write_32(0x0300907c, 0x0500);
+	// Release ANA_PD p5.0x10@[13:8] = 6'b001100
+	mmio_write_32(0x03009040, 0x0c00);
+	// Release ANA_EN p5.0x10@[7:0] = 8'b01111110
+	mmio_write_32(0x03009040, 0x0c7e);
+
+	// Wait PLL_Lock, Lock_Status p5.0x12@[15] = 1
+	//mdelay(1);
+
+	// Release 0x0800[1] = 1/ana_rst_n
+	mmio_write_32(0x03009800, 0x0906);
+
+	// ANA INIT
+	// @Switch to MII-page5
+	mmio_write_32(0x0300907c, 0x0500);
+
+	// PHY_ID
+	mmio_write_32(0x03009008, 0x0043);
+	mmio_write_32(0x0300900c, 0x5649);
+
+	// switch to MDIO control by ETH_MAC
+	mmio_write_32(0x03009804, 0x0000);
+}
+
+void cv180x_ephy_led_pinmux(void)
+{
+	// LED PAD MUX
+	mmio_write_32(0x030010e0, 0x05);
+	mmio_write_32(0x030010e4, 0x05);
+	//(SD1_CLK selphy)
+	mmio_write_32(0x050270b0, 0x11111111);
+	//(SD1_CMD selphy)
+	mmio_write_32(0x050270b4, 0x11111111);
 }

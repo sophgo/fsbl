@@ -14,7 +14,6 @@ TEST_FROM_SPINOR1 := 0
 
 DEFINES += -DLZ4_USER_MEMORY_FUNCTIONS=1
 
-# ifeq ($(FSBL_SECURE_BOOT_SUPPORT),1)
 DEFINES += \
 	-DNO_ALLOCS \
 	-DARGTYPE=3 \
@@ -31,7 +30,6 @@ CRYPT_INCLUDES := \
 CRYPT_SOURCES := \
 	lib/BigDigits/bigdigits.c \
 	lib/libtomcrypt/src/hashes/sha2/sha256.c
-# endif
 
 INCLUDES += \
 	-Iinclude \
@@ -59,27 +57,31 @@ BL_COMMON_SOURCES = \
 DECOMPRESSION_SOURCES = \
 	lib/lzma/LzmaDec.c \
 	lib/lz4/lz4_all.c \
-	lib/lz4/xxhash.c
+	lib/lz4/xxhash.c \
+	lib/crc/crc16.c \
+	lib/utils/decompress.c \
+	lib/utils/bl2_2nd_parse.c
 
 BL2_SRCS = \
 	${BL_COMMON_SOURCES} \
 	plat/${CHIP_ARCH}/platform_device.c \
 	plat/${CHIP_ARCH}/bl2/bl2_opt.c \
-	lib/utils/decompress.c \
+	plat/${CHIP_ARCH}/bl2/bl2_double_opt.c \
 	plat/${CHIP_ARCH}/usb/cps_cvi.c  \
 	plat/${CHIP_ARCH}/usb/usb_tty.c  \
 	plat/${CHIP_ARCH}/usb/dwc2_udc_otg.c  \
 	plat/${CHIP_ARCH}/usb/dwc2_udc_otg_xfer_dma.c  \
 	plat/${CHIP_ARCH}/usb/cv_usb.c  \
-	lib/crc/crc16.c \
-	${DECOMPRESSION_SOURCES}
+	plat/${CHIP_ARCH}/bl2/cvi_spinor.c \
+	plat/${CHIP_ARCH}/bl2/cvi_spinand.c
 
 BL2_SOURCES = \
 	${BL2_CPU_SOURCES} \
 	${BL2_SRCS} \
+	${DECOMPRESSION_SOURCES} \
 	plat/${CHIP_ARCH}/bl2/bl2_main.c
 
 include plat/${CHIP_ARCH}/ddr/ddr.mk
 
 BL2_LINKERFILE := plat/${CHIP_ARCH}/bl2/bl2.ld.S
-#BL2_RLS_OBJS := plat/${CHIP_ARCH}/bl2_objs/${PROJECT_FULLNAME}/bl2/*.o
+#BL2_RLS_OBJS := plat/${CHIP_ARCH}/bl2_objs/*.o

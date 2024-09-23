@@ -5,10 +5,10 @@
 #include <utils.h>
 #include <errno.h>
 #include <delay_timer.h>
-#include <security/efuse.h>
 
 #include <security/security.h>
 #include <security/cryptodma.h>
+#include <security/efuse.h>
 
 #include <bigdigits.h>
 #include <tomcrypt.h>
@@ -126,88 +126,4 @@ int dec_verify_image(const void *image, size_t size, size_t dec_skip, struct fip
 	size -= RSA_N_BYTES;
 
 	return verify_rsa(image, size, sig, fip_param1->bl_pk, RSA_N_BYTES);
-}
-
-int efuse_wait_idle(void)
-{
-	uint32_t status;
-	uint32_t time_count = 0;
-	int ret = 0;
-
-	do {
-		status = mmio_read_32(EFUSE_BASE + EFUSE_STATUS);
-		time_count++;
-
-		if (time_count > 0x1000) {
-			NOTICE("wait idle timeout\n");
-			return -1;
-		}
-	} while ((status & 0x1) != 0);
-
-	return ret;
-}
-
-int efuse_power_on(void)
-{
-	int ret = 0;
-
-	if (efuse_wait_idle() != 0) {
-		return -1;
-	}
-
-	mmio_write_32(EFUSE_BASE + EFUSE_MODE, 0x10);
-
-	return ret;
-}
-
-int efuse_program_bit(uint32_t addr, const uint32_t bit)
-{
-	uint16_t w_addr = (bit << 7) | ((addr & 0x3F) << 1);
-
-	if (efuse_wait_idle() != 0) {
-		return -1;
-	}
-
-	mmio_write_32(EFUSE_BASE + EFUSE_ADR, (w_addr & 0xFFF));
-	mmio_write_32(EFUSE_BASE + EFUSE_MODE, 0x14);
-
-	if (efuse_wait_idle() != 0) {
-		return -1;
-	}
-
-	w_addr |= 0x1;
-	mmio_write_32(EFUSE_BASE + EFUSE_ADR, (w_addr & 0xFFF));
-	mmio_write_32(EFUSE_BASE + EFUSE_MODE, 0x14);
-
-	return 0;
-}
-
-int efuse_refresh_shadow(void)
-{
-	int ret = 0;
-
-	if (efuse_wait_idle() != 0) {
-		return -1;
-	}
-
-	mmio_write_32(EFUSE_BASE + EFUSE_MODE, 0x30);
-
-	if (efuse_wait_idle() != 0) {
-		return -1;
-	}
-
-	return ret;
-}
-
-int efuse_power_off(void)
-{
-	int ret = 0;
-
-	if (efuse_wait_idle() != 0) {
-		return -1;
-	}
-
-	mmio_write_32(EFUSE_BASE + EFUSE_MODE, 0x18);
-
-	return ret;
 }

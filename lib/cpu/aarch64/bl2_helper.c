@@ -212,6 +212,7 @@ typedef struct bl31_params {
 #define MODE_EL2 U(0x2)
 #define MODE_EL1 U(0x1)
 #define NON_SECURE U(0x1)
+#define SECURE		U(0x0)
 
 #define PARAM_EP_SECURITY_MASK U(0x1)
 
@@ -220,27 +221,35 @@ typedef struct bl31_params {
 struct {
 	bl31_params_t bl31_params;
 	entry_point_info_t bl33_ep_info;
+	entry_point_info_t bl32_ep_info;
 } static next_info;
 
 void jump_to_monitor(uintptr_t monitor_entry, uintptr_t next_addr)
 {
-	const char skip[] = "SKIP_LICENSE_CHECK\0";
+	// const char skip[] = "SKIP_LICENSE_CHECK\0";
 	bl31_params_t *from_bl2 = &next_info.bl31_params;
 
-	memcpy((void *)LICENSE_FILE_ADDR, skip, sizeof(skip));
+	// memcpy((void *)LICENSE_FILE_ADDR, skip, sizeof(skip));
 
 	from_bl2->h.type = PARAM_BL31;
 	from_bl2->h.version = VERSION_1;
 	from_bl2->bl33_ep_info = &next_info.bl33_ep_info;
+	from_bl2->bl32_ep_info = &next_info.bl32_ep_info;
 
+	SET_SECURITY_STATE(from_bl2->bl32_ep_info->h.attr, SECURE);
+	from_bl2->bl32_ep_info->pc = monitor_entry + 0x30000;
+	from_bl2->bl32_ep_info->args.arg0 = 0;
+	from_bl2->bl32_ep_info->spsr = 0;
+	NOTICE("get BL32_ep_info:%lx \n",from_bl2->bl32_ep_info->pc);
 	SET_SECURITY_STATE(from_bl2->bl33_ep_info->h.attr, NON_SECURE);
 	from_bl2->bl33_ep_info->pc = next_addr;
 	from_bl2->bl33_ep_info->args.arg0 = 0;
 	from_bl2->bl33_ep_info->spsr = SPSR_64(MODE_EL2, MODE_SP_ELX, DISABLE_ALL_EXCEPTIONS);
 
-	flush_dcache_range(LICENSE_FILE_ADDR, 64);
-	flush_dcache_range((uintptr_t)&next_info, sizeof(next_info));
+	// flush_dcache_range(LICENSE_FILE_ADDR, 64);
 
+	flush_dcache_range(BL2_BASE, BL2_SIZE);
+	isb();
 	time_records->fsbl_exit = read_time_ms();
 	jump_bl31(monitor_entry, from_bl2);
 }

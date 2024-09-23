@@ -16,16 +16,25 @@
 #include <types.h>
 #include <bl_common.h>
 #include <mmio.h>
+#include <bl2.h>
+#include <ddr.h>
 
 extern struct _time_records *time_records;
 extern struct fip_param1 *fip_param1;
+extern struct fip_param2 fip_param2;
+
+union SRAMBuffer {
+	struct ddr_param ddr_param;
+	struct loader_2nd_header loader_2nd_header;
+	uint8_t buf[BLOCK_SIZE];
+} __aligned(BLOCK_SIZE);
 
 void panic_handler(void) __dead2;
 void __system_reset(const char *file, unsigned int line) __dead2;
-#define SYSTEM_RESET(...)                                                                                              \
-	do {                                                                                                           \
-		ERROR(__VA_ARGS__);                                                                                    \
-		__system_reset(__FILE__, __LINE__);                                                                    \
+#define SYSTEM_RESET(...)                                                      \
+	do {                                                                   \
+		ERROR(__VA_ARGS__);                                            \
+		__system_reset(__FILE__, __LINE__);                            \
 	} while (1)
 
 enum boot_src get_boot_src(void);
@@ -51,7 +60,8 @@ enum CHIP_CONF_CMD {
 	CHIP_CONF_CMD_DELAY_MS = 0xFFFFFFFD
 };
 
-void apply_chip_conf(const struct chip_conf chip_conf[], uint32_t size, enum CHIP_CONF_CMD scan_start,
+void apply_chip_conf(const struct chip_conf chip_conf[], uint32_t size,
+		     enum CHIP_CONF_CMD scan_start,
 		     enum CHIP_CONF_CMD scan_end);
 
 void reset_c906l(uintptr_t reset_address);
@@ -122,11 +132,15 @@ void sys_pll_init(void);
 void sys_pll_init_od_sel(void);
 void sys_switch_all_to_pll(void);
 
-void lock_efuse_chipsn(void);
 int load_ddr(void);
 int load_rest(void);
 int load_rest_od_sel(void);
 
+int load_rest_doublesdk(void);
+int load_rest_od_sel_doublesdk(void);
+
+void cv180x_ephy_id_init(void);
+void cv180x_ephy_led_pinmux(void);
 #endif /* __ASSEMBLY__ */
 
 #endif /* __PLATFORM_H__ */

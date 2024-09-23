@@ -96,9 +96,6 @@ void setup_dl_flag(void)
 	uint32_t v = p_rom_api_get_boot_src();
 
 	switch (v) {
-	case BOOT_SRC_UART:
-		mmio_write_32(BOOT_SOURCE_FLAG_ADDR, MAGIC_NUM_UART_DL);
-		break;
 	case BOOT_SRC_SD:
 		mmio_write_32(BOOT_SOURCE_FLAG_ADDR, MAGIC_NUM_SD_DL);
 		break;
@@ -139,7 +136,7 @@ void sys_switch_all_to_pll(void)
 
 void sys_pll_od(void)
 {
-	// OD clk setting
+		// OD clk setting
 	uint32_t value;
 	uint32_t byp0_value;
 
@@ -197,10 +194,6 @@ void sys_pll_od(void)
 	// set mpll = 1050MHz
 	mmio_write_32(0x03002908, 0x05548101);
 
-	// set clk_sel_23: [23] clk_sel for clk_c906_0 = 1 (DIV_IN0_SRC_MUX)
-	// set clk_sel_24: [24] clk_sel for clk_c906_1 = 1 (DIV_IN0_SRC_MUX)
-	mmio_write_32(0x03002020, 0x01800000);
-
 	// set div, src_mux of clk_c906_0: [20:16]div_factor=1, [9:8]clk_src = 3 (mpll), 1050/1 = 1050MHz
 	mmio_write_32(0x03002130, 0x00010309);
 
@@ -210,11 +203,10 @@ void sys_pll_od(void)
 	// set mpll = 1000MHz
 	mmio_write_32(0x03002908, 0x05508101);
 
-	// set clk_sel_0: [0] clk_sel for clk_a53 = 1 (DIV_IN0_SRC_MUX)
-	mmio_write_32(0x03002020, 0x00000001);
-
 	// set div, src_mux of clk_a53: [20:16]div_factor=1, [9:8]clk_src = 3 (mpll)
 	mmio_write_32(0x03002040, 0x00010309);
+	// set div, src_mux of clk_c906_1: [20:16]div_factor=1, [9:8]clk_src = 1 (a0pll), 786.432/1 = 786.432MHz
+	mmio_write_32(0x03002138, 0x00010109);
 #endif
 
 	// set tpll = 1400MHz
@@ -222,7 +214,7 @@ void sys_pll_od(void)
 
 	mmio_write_32(0x03002048, 0x00030009); //clk_cpu_axi0 = FPLL(1500) / 3
 	mmio_write_32(0x03002054, 0x00020009); //clk_tpu = TPLL(1400) / 2 = 700MHz
-	mmio_write_32(0x03002064, 0x00080009); //clk_emmc = FPLL(1500) / 8 = 187.5MHz
+	mmio_write_32(0x03002064, 0x00040009); //clk_emmc = FPLL(1500) / 4 = 375MHz
 	mmio_write_32(0x03002088, 0x00080009); //clk_spi_nand = FPLL(1500) / 8 = 187.5MHz
 	mmio_write_32(0x03002098, 0x00200009); //clk_sdma_aud0 = APLL(786.432) / 32 = 24.576MHz
 	mmio_write_32(0x03002120, 0x000F0009); //clk_pwm_src = FPLL(1500) / 15 = 100MHz
@@ -250,6 +242,16 @@ void sys_pll_od(void)
 
 	//wait for pll stable
 	udelay(200);
+
+#ifdef __riscv
+	// set clk_sel_23: [23] clk_sel for clk_c906_0 = 1 (DIV_IN0_SRC_MUX)
+	// set clk_sel_24: [24] clk_sel for clk_c906_1 = 1 (DIV_IN0_SRC_MUX)
+	mmio_write_32(0x03002020, 0x01800000);
+#else
+	// set clk_sel_0: [0] clk_sel for clk_a53 = 1 (DIV_IN0_SRC_MUX)
+	// set clk_sel_24: [24] clk_sel for clk_c906_1 = 1 (DIV_IN0_SRC_MUX)
+	mmio_write_32(0x03002020, 0x01000001);
+#endif
 
 	// switch clock to PLL from xtal except clk_axi4 & clk_spi_nand
 	byp0_value &= (1 << 8 | //clk_spi_nand
@@ -327,10 +329,6 @@ void sys_pll_nd(int vc_overdrive)
 	// set mpll = 850MHz
 	mmio_write_32(0x03002908, 0x00448101);
 
-	// set clk_sel_23: [23] clk_sel for clk_c906_0 = 1 (DIV_IN0_SRC_MUX)
-	// set clk_sel_24: [24] clk_sel for clk_c906_1 = 1 (DIV_IN0_SRC_MUX)
-	mmio_write_32(0x03002020, 0x01800000);
-
 	// set div, src_mux of clk_c906_0: [20:16]div_factor=1, [9:8]clk_src = 3 (mpll), 850/1 = 850MHz
 	mmio_write_32(0x03002130, 0x00010309);
 
@@ -340,11 +338,11 @@ void sys_pll_nd(int vc_overdrive)
 	// set mpll = 800MHz
 	mmio_write_32(0x03002908, 0x00408101);
 
-	// set clk_sel_0: [0] clk_sel for clk_a53 = 1 (DIV_IN0_SRC_MUX)
-	mmio_write_32(0x03002020, 0x00000001);
-
 	// set div, src_mux of clk_a53: [20:16]div_factor=1, [9:8]clk_src = 3 (mpll)
 	mmio_write_32(0x03002040, 0x00010309);
+
+	// set div, src_mux of clk_c906_1: [20:16]div_factor=2, [9:8]clk_src = 2 (disppll), 1188/2 = 594MHz
+	mmio_write_32(0x03002138, 0x00020209);
 #endif
 
 #ifdef TPU_PERF_MODE
@@ -358,7 +356,7 @@ void sys_pll_nd(int vc_overdrive)
 #endif
 
 	mmio_write_32(0x03002048, 0x00030009); //clk_cpu_axi0 = FPLL(1500) / 3
-	mmio_write_32(0x03002064, 0x00080009); //clk_emmc = FPLL(1500) / 8 = 187.5MHz
+	mmio_write_32(0x03002064, 0x00040009); //clk_emmc = FPLL(1500) / 4 = 375MHz
 	mmio_write_32(0x03002088, 0x00080009); //clk_spi_nand = FPLL(1500) / 8 = 187.5MHz
 	mmio_write_32(0x03002098, 0x00120009); //clk_sdma_aud0 = APLL(442.368) / 18 = 24.576MHz
 	mmio_write_32(0x03002120, 0x000F0009); //clk_pwm_src = FPLL(1500) / 15 = 100MHz
@@ -395,6 +393,16 @@ void sys_pll_nd(int vc_overdrive)
 
 	//wait for pll stable
 	udelay(200);
+
+#ifdef __riscv
+	// set clk_sel_23: [23] clk_sel for clk_c906_0 = 1 (DIV_IN0_SRC_MUX)
+	// set clk_sel_24: [24] clk_sel for clk_c906_1 = 1 (DIV_IN0_SRC_MUX)
+	mmio_write_32(0x03002020, 0x01800000);
+#else
+	// set clk_sel_0: [0] clk_sel for clk_a53 = 1 (DIV_IN0_SRC_MUX)
+	// set clk_sel_24: [24] clk_sel for clk_c906_1 = 1 (DIV_IN0_SRC_MUX)
+	mmio_write_32(0x03002020, 0x01000001);
+#endif
 
 	// switch clock to PLL from xtal except clk_axi4 & clk_spi_nand
 	byp0_value &= (1 << 8 | //clk_spi_nand
@@ -519,9 +527,12 @@ void set_rtc_en_registers(void)
 	mmio_write_32(REG_RTC_BASE + RTC_EN_WDT_RST_REQ, 0x01);
 	while (mmio_read_32(REG_RTC_BASE + RTC_EN_WDT_RST_REQ) != 0x01)
 		;
-
+#ifdef CONFIG_SUSPEND
 	// Set rtcsys_rst_ctrl[24] = 1; bit 24 is reg_rtcsys_reset_en
-	mmio_setbits_32(REG_RTC_CTRL_BASE + RTC_POR_RST_CTRL, 0X1);
+	mmio_write_32(REG_RTC_CTRL_BASE + RTC_POR_RST_CTRL, 0X2);
+#else
+	mmio_write_32(REG_RTC_CTRL_BASE + RTC_POR_RST_CTRL, 0X1);
+#endif
 
 	// rtc_ctrl0_unlockkey
 	mmio_write_32(REG_RTC_CTRL_BASE + RTC_CTRL0_UNLOCKKEY, 0xAB18);
@@ -537,4 +548,51 @@ void set_rtc_en_registers(void)
 
 void apply_analog_trimming_data(void)
 {
+}
+
+void cv181x_ephy_id_init(void)
+{
+	// set rg_ephy_apb_rw_sel 0x0804@[0]=1/APB by using APB interface
+	mmio_write_32(0x03009804, 0x0001);
+
+	// Release 0x0800[0]=0/shutdown
+	mmio_write_32(0x03009800, 0x0900);
+
+	// Release 0x0800[2]=1/dig_rst_n, Let mii_reg can be accessabile
+	mmio_write_32(0x03009800, 0x0904);
+
+	// ANA INIT (PD/EN), switch to MII-page5
+	mmio_write_32(0x0300907c, 0x0500);
+	// Release ANA_PD p5.0x10@[13:8] = 6'b001100
+	mmio_write_32(0x03009040, 0x0c00);
+	// Release ANA_EN p5.0x10@[7:0] = 8'b01111110
+	mmio_write_32(0x03009040, 0x0c7e);
+
+	// Wait PLL_Lock, Lock_Status p5.0x12@[15] = 1
+	//mdelay(1);
+
+	// Release 0x0800[1] = 1/ana_rst_n
+	mmio_write_32(0x03009800, 0x0906);
+
+	// ANA INIT
+	// @Switch to MII-page5
+	mmio_write_32(0x0300907c, 0x0500);
+
+	// PHY_ID
+	mmio_write_32(0x03009008, 0x0043);
+	mmio_write_32(0x0300900c, 0x5649);
+
+	// switch to MDIO control by ETH_MAC
+	mmio_write_32(0x03009804, 0x0000);
+}
+
+void cv181x_ephy_led_pinmux(void)
+{
+	// LED PAD MUX
+	mmio_write_32(0x030010e0, 0x05);
+	mmio_write_32(0x030010e4, 0x05);
+	//(SD1_CLK selphy)
+	mmio_write_32(0x050270b0, 0x11111111);
+	//(SD1_CMD selphy)
+	mmio_write_32(0x050270b4, 0x11111111);
 }

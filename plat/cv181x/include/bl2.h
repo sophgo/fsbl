@@ -19,11 +19,27 @@ struct fip_param2 {
 	uint32_t monitor_loadaddr;
 	uint32_t monitor_size;
 	uint32_t monitor_runaddr;
+	uint32_t bl32_cksum;
+	uint32_t bl32_loadaddr;
+	uint32_t bl32_size;
+	uint32_t bl32_runaddr;
 	uint32_t loader_2nd_reserved0;
 	uint32_t loader_2nd_loadaddr;
 	uint32_t loader_2nd_reserved1;
 	uint32_t loader_2nd_reserved2;
-	uint8_t reserved4[4016];
+	uint32_t freertos_a_cksum;
+	uint32_t freertos_a_loadaddr;
+	uint32_t freertos_a_size;
+	uint32_t freertos_a_runaddr;
+	uint32_t monitor_a_cksum;
+	uint32_t monitor_a_loadaddr;
+	uint32_t monitor_a_size;
+	uint32_t monitor_a_runaddr;
+	uint32_t loader_2nd_a_reserved0;
+	uint32_t loader_2nd_a_loadaddr;
+	uint32_t loader_2nd_a_reserved1;
+	uint32_t loader_2nd_a_reserved2;
+	uint8_t reserved4[3952];
 } __packed;
 
 struct loader_2nd_header {
@@ -36,6 +52,9 @@ struct loader_2nd_header {
 	uint32_t reserved2;
 } __packed;
 
+#ifdef DOUBLESDK
+extern char boot_flag_A;
+#endif
 #define PARAM2_SIZE 0x1000
 
 #define LOADER_2ND_MAGIC_RAW 0x20203342 // "B3  "

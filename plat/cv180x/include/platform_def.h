@@ -217,6 +217,29 @@ struct _time_records {
 	uint16_t kernel_run_init_start;
 } __packed;
 
+struct _macros_misc {
+	uint32_t blcp_2nd_comp_bin_addr;
+	uint32_t decomp_dts_size;
+	uint32_t blcp_2nd_loadaddr;
+	uint32_t jump_loadaddr;
+	uint32_t jump_loadaddr_size;
+	uint32_t bl_param_runaddr;
+	uint32_t bl_param_loadaddr;
+	uint32_t bl_param_size;
+	uint32_t bl_param_bak_runaddr;
+	uint32_t bl_param_bak_loadaddr;
+	uint32_t bl_logo_runaddr;
+	uint32_t bl_logo_loadaddr;
+	uint32_t bl_logo_size;
+	uint32_t bl_pq_runaddr;
+	uint32_t bl_pq_loadaddr;
+	uint32_t bl_pq_size;
+	uint32_t storage_type;
+	uint32_t dram_base;
+	uint32_t dram_size;
+	uint32_t bl_decomp_buf_addr;
+}__packed __aligned(__alignof__(unsigned int));
+
 extern struct _time_records *time_records;
 
 #endif /* __ASSEMBLY__ */

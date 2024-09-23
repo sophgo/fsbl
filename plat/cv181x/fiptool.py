@@ -198,13 +198,34 @@ class FIP:
             Entry.make("MONITOR_LOADADDR", 4, int),
             Entry.make("MONITOR_SIZE", 4, int),
             Entry.make("MONITOR_RUNADDR", 4, int),
+             # ATF-BL32
+            Entry.make("BL32_CKSUM", 4, int),
+            Entry.make("BL32_LOADADDR", 4, int),
+            Entry.make("BL32_SIZE", 4, int),
+            Entry.make("BL32_RUNADDR", 4, int),
             # u-boot
             Entry.make("LOADER_2ND_RESERVED0", 4, int),
             Entry.make("LOADER_2ND_LOADADDR", 4, int),
             Entry.make("LOADER_2ND_RESERVED1", 4, int),
             Entry.make("LOADER_2ND_RESERVED2", 4, int),
+            # freertos_A
+            Entry.make("FREERTOS_A_CKSUM", 4, int),
+            Entry.make("FREERTOS_A_LOADADDR", 4, int),
+            Entry.make("FREERTOS_A_SIZE", 4, int),
+            Entry.make("FREERTOS_A_RUNADDR", 4, int),
+            # monitor_A
+            Entry.make("MONITOR_A_CKSUM", 4, int),
+            Entry.make("MONITOR_A_LOADADDR", 4, int),
+            Entry.make("MONITOR_A_SIZE", 4, int),
+            Entry.make("MONITOR_A_RUNADDR", 4, int),
+            # u-boot_A
+            Entry.make("LOADER_2ND_A_RESERVED0", 4, int),
+            Entry.make("LOADER_2ND_A_LOADADDR", 4, int),
+            Entry.make("LOADER_2ND_A_RESERVED1", 4, int),
+            Entry.make("LOADER_2ND_A_RESERVED2", 4, int),
+
             # Reserved
-            Entry.make("RESERVED_LAST", 4096 - 16 * 5, bytes),
+            Entry.make("RESERVED_LAST", 4096 - 16 * 9, bytes),
         ]
     )
 
@@ -213,11 +234,27 @@ class FIP:
             Entry.make("DDR_PARAM", None, bytes),
             Entry.make("BLCP_2ND", None, bytes),
             Entry.make("MONITOR", None, bytes),
+            Entry.make("BL32", None, bytes),
             Entry.make("LOADER_2ND", None, bytes),
+            Entry.make("FREERTOS_A", None, bytes),
+            Entry.make("MONITOR_A", None, bytes),
+            Entry.make("LOADER_2ND_A", None, bytes),
         ]
     )
 
     ldr_2nd_hdr = OrderedDict(
+        [
+            Entry.make("JUMP0", 4, int),
+            Entry.make("MAGIC", 4, int),
+            Entry.make("CKSUM", 4, int),
+            Entry.make("SIZE", 4, int),
+            Entry.make("RUNADDR", 8, int),
+            Entry.make("RESERVED1", 4, int),
+            Entry.make("RESERVED2", 4, int),
+        ]
+    )
+
+    ldr_2nd_hdr_A = OrderedDict(
         [
             Entry.make("JUMP0", 4, int),
             Entry.make("MAGIC", 4, int),
@@ -252,6 +289,10 @@ class FIP:
 
         addr = 0
         for entry in self.ldr_2nd_hdr.values():
+            entry.addr = addr
+            addr += entry.entry_size
+        addr = 0
+        for entry in self.ldr_2nd_hdr_A.values():
             entry.addr = addr
             addr += entry.entry_size
 
@@ -475,6 +516,37 @@ class FIP:
 
         logging.debug("monitor=%#x bytes", len(monitor))
         self.body2["MONITOR"].content = monitor
+    
+    def add_bl32(self, args):
+        with open(args.BL32, "rb") as fp:
+            bl32 = fp.read()
+
+        logging.debug("bl32=%#x bytes", len(bl32))
+        self.body2["BL32"].content = bl32
+
+    def add_freertos_A(self, args):
+        if args.doublesdk:
+            with open(args.FREERTOS_A, "rb") as fp:
+                freertos_A = fp.read()
+            logging.debug("freertos_A=%#x bytes", len(freertos_A))
+            self.body2["FREERTOS_A"].content = freertos_A
+
+    def add_monitor_A(self, args):
+        if args.doublesdk:
+            with open(args.MONITOR_A, "rb") as fp:
+                monitor_A = fp.read()
+
+            logging.debug("monitor_A=%#x bytes", len(monitor_A))
+            self.body2["MONITOR_A"].content = monitor_A
+
+    def add_loader_2nd_A(self, args):
+        if args.doublesdk:
+            with open(args.LOADER_2ND_A, "rb") as fp:
+                loader_2nd_A = fp.read()
+
+            logging.debug("loader_2nd_A=%#x bytes", len(loader_2nd_A))
+            self.compress_algo = args.compress
+            self.body2["LOADER_2ND_A"].content = loader_2nd_A
 
     def add_loader_2nd(self, args):
         with open(args.LOADER_2ND, "rb") as fp:
@@ -522,7 +594,12 @@ class FIP:
         self.param2["BLCP_2ND_LOADADDR"].content = len(fip_bin)
         self.param2["BLCP_2ND_RUNADDR"].content = runaddr
 
-        return fip_bin + body
+        if os.getenv("C906L_PARTITION_EXIST") == '1':
+            logging.info("C906L_PARTITION_EXIST is true, yoc packed independented")
+            return fip_bin
+        else:
+            logging.info("C906L_PARTITION_EXIST is false, yoc packed in fip")
+            return fip_bin + body
 
     def pack_monitor(self, fip_bin, monitor_runaddr):
         logging.debug("pack_monitor:")
@@ -542,6 +619,70 @@ class FIP:
         self.param2["MONITOR_RUNADDR"].content = monitor_runaddr
 
         return fip_bin + monitor
+
+    def pack_freertos_A(self, fip_bin, blcp_2nd_runaddr):
+        logging.debug("pack_freertos_A:")
+        if not len(self.body2["FREERTOS_A"].content):
+            return
+
+        runaddr = int(blcp_2nd_runaddr)
+
+        fip_bin = self.pad(fip_bin, IMAGE_ALIGN)
+
+        # Pack MONITOR to body2
+        body = self.pad(self.body2["FREERTOS_A"].content, IMAGE_ALIGN)
+
+        self.param2["FREERTOS_A_CKSUM"].content = self.image_crc(body)
+        self.param2["FREERTOS_A_SIZE"].content = len(body)
+        self.param2["FREERTOS_A_LOADADDR"].content = len(fip_bin)
+        self.param2["FREERTOS_A_RUNADDR"].content = runaddr
+
+        if os.getenv("C906L_PARTITION_EXIST") == '1':
+            logging.info("C906L_PARTITION_EXIST is true, freertos packed independented")
+            return fip_bin
+        else:
+            logging.info("C906L_PARTITION_EXIST is false, freertos packed in fip")
+            return fip_bin + body
+        logging.info("freertos packed in fip")
+        return fip_bin + body
+
+    def pack_monitor_A(self, fip_bin, monitor_runaddr):
+        logging.debug("pack_monitor_A:")
+        if not len(self.body2["MONITOR_A"].content):
+            return
+
+        monitor_runaddr = int(monitor_runaddr)
+
+        fip_bin = self.pad(fip_bin, IMAGE_ALIGN)
+
+        # Pack MONITOR to body2
+        monitor = self.pad(self.body2["MONITOR_A"].content, IMAGE_ALIGN)
+
+        self.param2["MONITOR_A_CKSUM"].content = self.image_crc(monitor)
+        self.param2["MONITOR_A_SIZE"].content = len(monitor)
+        self.param2["MONITOR_A_LOADADDR"].content = len(fip_bin)
+        self.param2["MONITOR_A_RUNADDR"].content = monitor_runaddr
+
+        return fip_bin + monitor
+
+    def pack_bl32(self, fip_bin, bl32_runaddr):
+        logging.debug("pack_bl32:")
+        if not len(self.body2["BL32"].content):
+            return
+
+        bl32_runaddr = int(bl32_runaddr)
+
+        fip_bin = self.pad(fip_bin, IMAGE_ALIGN)
+
+        # Pack MONITOR to body2
+        bl32 = self.pad(self.body2["BL32"].content, IMAGE_ALIGN)
+
+        self.param2["BL32_CKSUM"].content = self.image_crc(bl32)
+        self.param2["BL32_SIZE"].content = len(bl32)
+        self.param2["BL32_LOADADDR"].content = len(fip_bin)
+        self.param2["BL32_RUNADDR"].content = bl32_runaddr
+
+        return fip_bin + bl32
 
     def _parse_ldr_2nd_hdr(self, image):
         for e in self.ldr_2nd_hdr.values():
@@ -607,6 +748,70 @@ class FIP:
         # Append LOADER_2ND to body2
         return fip_bin + self.body2["LOADER_2ND"].content
 
+    def _parse_ldr_2nd_hdr_A(self, image):
+        for e in self.ldr_2nd_hdr_A.values():
+            e.content = image[e.addr: e.end]
+
+    def _update_ldr_2nd_hdr_A(self):
+        image = self.body2["LOADER_2ND_A"].content
+        hdr_size = self._param_size(self.ldr_2nd_hdr_A)
+        hdr, body = image[:hdr_size], image[hdr_size:]
+
+        # Update SIZE
+        self.ldr_2nd_hdr_A["SIZE"].content = len(image)
+
+        # Update CKSUM
+        hdr = bytearray(b"".join((e.content for e in self.ldr_2nd_hdr_A.values())))
+        # CKSUM is calculated after "CKSUM" field
+        hdr_cksum = self.ldr_2nd_hdr_A["CKSUM"]
+        crc = self.image_crc((hdr + body)[hdr_cksum.end:])
+        hdr_cksum.content = crc
+        hdr = bytearray(b"".join((e.content for e in self.ldr_2nd_hdr_A.values())))
+
+        self.body2["LOADER_2ND_A"].content = hdr + body
+
+    def _compress_ldr_2nd_A(self):
+        image = self.body2["LOADER_2ND_A"].content
+        hdr_size = self._param_size(self.ldr_2nd_hdr_A)
+        hdr, body = image[:hdr_size], image[hdr_size:]
+
+        magic = self.ldr_2nd_hdr_A["MAGIC"].content
+        if magic == LOADER_2ND_MAGIC_ORIG:
+            # if image is uncompressed, compress it.
+            if self.compress_algo is None:
+                pass
+            elif self.compress_algo == "lzma":
+                self.ldr_2nd_hdr_A["MAGIC"].content = LOADER_2ND_MAGIC_LZMA
+                body = lzma_compress(body)
+                logging.info("lzma loader_2nd_A=%#x bytes wo header", len(body))
+            elif self.compress_algo == "lz4":
+                self.ldr_2nd_hdr_A["MAGIC"].content = LOADER_2ND_MAGIC_LZ4
+                body = lz4_compress(body)
+                logging.info("lz4 loader_2nd_A=%#x bytes wo header", len(body))
+            else:
+                raise NotImplementedError("'%r' is not supported." % self.compress_algo)
+        elif magic in LOADER_2ND_MAGIC_LIST:
+            logging.info("loader_2nd_A is already compressed")
+        else:
+            raise ValueError("unknown loader_2nd_A magic (%r)", magic)
+
+        self.body2["LOADER_2ND_A"].content = self.pad(hdr + body, IMAGE_ALIGN)
+
+    def pack_loader_2nd_A(self, fip_bin):
+        logging.debug("pack_loader_2nd_A:")
+        if not len(self.body2["LOADER_2ND_A"].content):
+            return
+
+        fip_bin = self.pad(fip_bin, IMAGE_ALIGN)
+        self.param2["LOADER_2ND_A_LOADADDR"].content = len(fip_bin)
+
+        self._parse_ldr_2nd_hdr_A(self.body2["LOADER_2ND_A"].content)
+        self._compress_ldr_2nd_A()
+        self._update_ldr_2nd_hdr_A()
+
+        # Append LOADER_2ND to body2
+        return fip_bin + self.body2["LOADER_2ND_A"].content
+
     def insert_param1(self, fip_bin, name, value):
         fip_bin = bytearray(fip_bin)
         e = self.param1[name]
@@ -640,12 +845,33 @@ class FIP:
                 runaddr = int(args.MONITOR_RUNADDR)
             fip_bin = self.pack_monitor(fip_bin, runaddr)
 
+        if len(self.body2["BL32"].content):
+            runaddr = self.param2["BL32_RUNADDR"].toint()
+            if not runaddr:
+                runaddr = int(args.BL32_RUNADDR)
+            fip_bin = self.pack_bl32(fip_bin, runaddr)
+
         if len(self.body2["LOADER_2ND"].content):
             fip_bin = self.pack_loader_2nd(fip_bin)
+        if args.doublesdk:
+            if len(self.body2["FREERTOS_A"].content):
+                runaddr = self.param2["FREERTOS_A_RUNADDR"].toint()
+                if not runaddr:
+                    runaddr = int(args.BLCP_2ND_RUNADDR)
+                fip_bin = self.pack_freertos_A(fip_bin, runaddr)
+
+            if len(self.body2["MONITOR_A"].content):
+                runaddr = self.param2["MONITOR_A_RUNADDR"].toint()
+                if not runaddr:
+                    runaddr = int(args.MONITOR_RUNADDR)
+                fip_bin = self.pack_monitor_A(fip_bin, runaddr)
+
+            if len(self.body2["LOADER_2ND_A"].content):
+                fip_bin = self.pack_loader_2nd_A(fip_bin)
 
         # Pack param2_bin
         param2_bin = b"".join((entry.content for entry in self.param2.values()))
-        self.param2["PARAM2_CKSUM"].content = self.image_crc(param2_bin[self.param2["PARAM2_CKSUM"].end :])
+        self.param2["PARAM2_CKSUM"].content = self.image_crc(param2_bin[self.param2["PARAM2_CKSUM"].end:])
         param2_bin = b"".join((entry.content for entry in self.param2.values()))  # update cksum
 
         logging.debug("len(param2_bin) is %d", len(param2_bin))
@@ -677,7 +903,12 @@ METHODS = {
     "DDR_PARAM": FIP.add_ddr_param,
     "BLCP_2ND": FIP.add_blcp_2nd,
     "MONITOR": FIP.add_monitor,
+    "BL32": FIP.add_bl32,
     "LOADER_2ND": FIP.add_loader_2nd,
+    # "doublesdk" : FIP.add_doublesdk,
+    "FREERTOS_A": FIP.add_freertos_A,
+    "MONITOR_A": FIP.add_monitor_A,
+    "LOADER_2ND_A": FIP.add_loader_2nd_A,
 }
 
 
@@ -731,8 +962,10 @@ def parse_args():
 
     pr_gen.add_argument("--MONITOR_RUNADDR", type=auto_int)
 
-    pr_gen.add_argument("--compress", choices=["lzma", "lz4", ""])
+    pr_gen.add_argument("--BL32_RUNADDR", type=auto_int)
 
+    pr_gen.add_argument("--compress", choices=["lzma", "lz4", ""])
+    pr_gen.add_argument("--doublesdk", type=bool)
     pr_gen.add_argument("--OLD_FIP", type=str)
     pr_gen.add_argument("--BLOCK_SIZE", type=auto_int)
     pr_gen.add_argument("--BL2_FILL", type=auto_int)

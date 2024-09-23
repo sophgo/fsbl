@@ -225,6 +225,29 @@ struct _time_records {
 	uint16_t kernel_run_init_start;
 } __packed;
 
+struct _macros_misc {
+	uint32_t blcp_2nd_comp_bin_addr;
+	uint32_t decomp_dts_size;
+	uint32_t blcp_2nd_loadaddr;
+	uint32_t jump_loadaddr;
+	uint32_t jump_loadaddr_size;
+	uint32_t bl_param_runaddr;
+	uint32_t bl_param_loadaddr;
+	uint32_t bl_param_size;
+	uint32_t bl_param_bak_runaddr;
+	uint32_t bl_param_bak_loadaddr;
+	uint32_t bl_logo_runaddr;
+	uint32_t bl_logo_loadaddr;
+	uint32_t bl_logo_size;
+	uint32_t bl_pq_runaddr;
+	uint32_t bl_pq_loadaddr;
+	uint32_t bl_pq_size;
+	uint32_t storage_type;
+	uint32_t dram_base;
+	uint32_t dram_size;
+	uint32_t bl_decomp_buf_addr;
+}__packed __aligned(__alignof__(unsigned int));
+
 extern struct _time_records *time_records;
 
 #endif /* __ASSEMBLY__ */
@@ -322,7 +345,6 @@ extern struct _time_records *time_records;
 #define BOOT_SOURCE_FLAG_SIZE 4
 #define MAGIC_NUM_USB_DL 0x4D474E31 // MGN1
 #define MAGIC_NUM_SD_DL 0x4D474E32 // MGN2
-#define MAGIC_NUM_UART_DL 0x4D474E33 // MGN3
 
 #define BOOT_LOG_LEN_ADDR (BOOT_SOURCE_FLAG_ADDR + BOOT_SOURCE_FLAG_SIZE) // 0x0E000008
 #define BOOT_LOG_LEN_SIZE 4
@@ -462,7 +484,6 @@ extern struct _time_records *time_records;
  */
 #define UART_DL_MAGIC 0x5552444c // "URDL"
 #define UART_DL_KERMIT_TIMEROUT 10000 // ms
-#define UART_DL_BAUDRATE 1500000
 
 /*
  * SD/EMMC definitions

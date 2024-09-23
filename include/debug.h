@@ -41,7 +41,7 @@ int putchar_l(int c, int level);
 #define NOTICE(...) tf_printf(MSG_NOTICE __VA_ARGS__)
 #define INFO(...) tf_printf(MSG_INFO " I:" __VA_ARGS__)
 
-#if LOG_LEVEL >= LOG_LEVEL_VERBOSE
+#if LOG_LEVEL > LOG_LEVEL_VERBOSE
 #define VERBOSE(...) tf_printf(MSG_VERBOSE __VA_ARGS__)
 #else
 #define VERBOSE(...)

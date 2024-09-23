@@ -70,4 +70,21 @@ extern uint16_t cv_usb_vid;
 
 int AcmApp(void *buf, uint32_t offset, uint32_t size);
 
+#ifdef USB_DL_BY_FSBL
+static inline int load_image_by_usb(void *buf, uint32_t offset, size_t image_size, int retry_num)
+{
+
+	int ret = -1;
+
+	if (usb_polling(buf, offset, image_size) == CV_USB_DL)
+		ret = 0;
+	else
+		ret = -2;
+
+	INFO("LIE/%d/%p/0x%x/%lu.\n", ret, buf, offset, image_size);
+
+	return ret;
+}
+#endif
+
 #endif
