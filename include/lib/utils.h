@@ -7,9 +7,7 @@
 #ifndef __UTILS_H__
 #define __UTILS_H__
 
-#if !ERROR_DEPRECATED
 #include <utils_def.h>
-#endif
 
 /*
  * C code should be put in this part of the header to avoid breaking ASM files
@@ -40,6 +38,11 @@ void zero_normalmem(void *mem, u_register_t length);
  *       zeroing.
  */
 void zeromem(void *mem, u_register_t length);
+
+char *ntostr(char *nbuf, uintmax_t num, int _base, int upper);
+
+void bytes_reverse(void *buf, size_t n);
+
 #endif /* !(defined(__LINKER__) || defined(__ASSEMBLY__)) */
 
 #endif /* __UTILS_H__ */

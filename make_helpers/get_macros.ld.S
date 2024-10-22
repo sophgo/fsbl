@@ -1,4 +1,4 @@
-#include <platform.h>
+#include <platform_def.h>
 #include <cdefs.h>
 
 #define MAKE_MACRO_TO_SYMBOL(macro) DEF_##macro = macro;

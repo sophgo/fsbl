@@ -18,6 +18,9 @@
 
 #define BIT(nr)				(1UL << (nr))
 
+// Get a bit field from a value
+#define GET_FIELD(var, mask, shift) (((var) >> (shift)) & (mask))
+
 #define MIN(x, y) __extension__ ({	\
 	__typeof__(x) _x = (x);		\
 	__typeof__(y) _y = (y);		\
@@ -32,10 +35,28 @@
 	_x > _y ? _x : _y;		\
 })
 
+#define IN_RANGE(_addr, _start, _size) ({ \
+	(_addr) >= (_start) && \
+	(_addr) < ((_start) + (_size)); \
+})
+
 #define PTR_INC(base, offset) (void *)((uint8_t *)(base) + (offset))
 #define PTR_DEC(base, offset) (void *)((uint8_t *)(base) - (offset))
 #define ROUND_UP(divident, divisor) ((((divident) + (divisor) - 1) / (divisor)) * (divisor))
 #define ROUND_DOWN(divident, divisor) (((divident) / (divisor)) * (divisor))
+
+#define DIV_ROUND_UP(n, d) (((n) + (d) - 1) / (d))
+#define DIV_ROUND_CLOSEST(x, divisor)(			\
+{							\
+	typeof(x) __x = x;				\
+	typeof(divisor) __d = divisor;			\
+	(((typeof(x))-1) > 0 ||				\
+	 ((typeof(divisor))-1) > 0 ||			\
+	 (((__x) > 0) == ((__d) > 0))) ?		\
+		(((__x) + ((__d) / 2)) / (__d)) :	\
+		(((__x) - ((__d) / 2)) / (__d));	\
+}							\
+)
 
 /*
  * The round_up() macro rounds up a value to the given boundary in a

@@ -26,7 +26,7 @@ ifndef PLAT_HELPERS_MK
     ALL_PLATFORM_DIRS           := $(patsubst %/,%,$(dir ${ALL_PLATFORM_MK_FILES}))
     ALL_PLATFORMS               := $(sort $(notdir ${ALL_PLATFORM_DIRS}))
 
-    PLAT_MAKEFILE_FULL          := $(filter %/${CHIP_ARCH}/${PLAT_MAKEFILE},${ALL_PLATFORM_MK_FILES})
+    PLAT_MAKEFILE_FULL          := $(filter %/cvitek/${CHIP_ARCH}/${SUBTYPE}/${PLAT_MAKEFILE},${ALL_PLATFORM_MK_FILES})
     PLATFORM_LIST               := $(subst ${space},|,${ALL_PLATFORMS})
     ifeq ($(PLAT_MAKEFILE_FULL),)
         $(error "Error: Invalid platform. The following platforms are available: ${PLATFORM_LIST}")

@@ -74,7 +74,7 @@ typedef	__uint32_t	__u_register_t;
 typedef	__uint32_t	__vm_offset_t;
 typedef	__uint32_t	__vm_paddr_t;
 typedef	__uint32_t	__vm_size_t;
-#elif defined AARCH64
+#elif defined AARCH64 || defined __riscv
 typedef	long			__int64_t;
 typedef	unsigned long		__uint64_t;
 typedef	__int64_t	__critical_t;

@@ -46,7 +46,7 @@ int memcmp(const void *s1, const void *s2, size_t len)
 void *memcpy(void *dst, const void *src, size_t len)
 {
 	void *__memcpy_aarch64(void *dst, const void *src, size_t len);
-#if IMAGE_BL32
+#if IMAGE_BL32 && __aarch64__
 	return __memcpy_aarch64(dst, src, len);
 #else
 	const char *s = src;

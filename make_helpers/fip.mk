@@ -1,7 +1,7 @@
-BLCP_PATH = ../fast_image_mcu/riscv/output/fast_image_mcu.bin
-ifeq ("$(wildcard $(BLCP_PATH))","")
-BLCP_PATH = test/empty.bin
-endif
+# BLCP_PATH = ../fast_image_mcu/riscv/output/fast_image_mcu.bin
+# ifeq ("$(wildcard $(BLCP_PATH))","")
+# BLCP_PATH = test/empty.bin
+# endif
 FIP_COMPRESS ?= lzma
 
 CHIP_CONF_PATH = ${BUILD_PLAT}/chip_conf.bin
@@ -14,7 +14,7 @@ else
 MONITOR_PATH = ${BUILD_PLAT}/bl31.bin
 BL32_PATH = ${BUILD_PLAT}/bl32.bin
 endif
-BLMCU_PATH = plat/cv186x/prebuilt/cv186x_mcu_fw.bin
+BLMCU_PATH = plat/cvitek/${CHIP_ARCH}/common/prebuilt/cv186x_mcu_fw.bin
 else ifeq (${BOOT_CPU},riscv)
 MONITOR_PATH = ../opensbi/build/platform/generic/firmware/fw_dynamic.bin
 endif
@@ -30,7 +30,7 @@ ${BUILD_PLAT}:
 
 gen-chip-conf:
 	$(print_target)
-	${Q}./plat/${CHIP_ARCH}/chip_conf.py ${CHIP_CONF_PATH}
+	${Q}./plat/cvitek/${CHIP_ARCH}/common/chip_conf.py ${CHIP_CONF_PATH}
 
 macro_to_env = ${NM} '${BLMACROS_ELF}' | awk '/DEF_${1}/ { rc = 1; print "${1}=0x" $$1 } END { exit !rc }' >> ${BUILD_PLAT}/blmacros.env
 

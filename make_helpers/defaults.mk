@@ -14,7 +14,7 @@
 AARCH32_SP			:= none
 
 # The Target build architecture. Supported values are: aarch64, aarch32.
-ARCH				:= aarch64
+ARCH				?= aarch64
 
 # Determine the version of ARM CCI product used in the platform. The platform
 # port can change this value if needed.

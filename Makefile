@@ -7,8 +7,10 @@
 # usage. Other command line options like "-s" are still propagated as usual.
 MAKEOVERRIDES =
 
-RELEASE_VER := 1
-CHIP_ARCH=cv186x
+ifeq ($(CHIP_ARCH),SOPHON)
+CHIP := cv186x
+endif
+CHIP_ARCH=${CHIP}
 
 include $(BUILD_PATH)/.config
 
@@ -43,13 +45,17 @@ DEFINES += -DCHIP=$(CHIP)
 ################################################################################
 MAKE_HELPERS_DIRECTORY := make_helpers/
 
-V ?= 1
+V ?= 0
 DEBUG := 0
 LOG_LEVEL := 2
 ENABLE_ASSERTIONS := 1
 PRINTF_TIMESTAMP := 0
-
+BL2_CLI_SIMPLE := 0
 NANDBOOT_V2 := 1
+
+ifeq (${BL2_CLI_SIMPLE},1)
+$(eval $(call add_define,BL2_USE_CLI))
+endif
 
 # Verbose flag
 ifeq (${V},0)
@@ -70,7 +76,7 @@ BUILD_PLAT	= ${O}
 
 BUILD_STRING := g$(shell git rev-parse --short HEAD 2> /dev/null)
 BUILD_STRING := ${BUILD_STRING}$(shell if git diff-index --name-only HEAD | grep -q "."; then echo -dirty; fi)
-VERSION_STRING := ${CHIP_ARCH_ALT}:${BUILD_STRING}
+VERSION_STRING := ${CHIP_ARCH}:${BUILD_STRING}
 
 ifeq ($(CHIP_ARCH),$(filter $(CHIP_ARCH),cv183x ))
 DEFINES += -D__CVITEK__
@@ -93,8 +99,6 @@ ifeq (${IMG_BLD}, 1)
 	ADD_BLD := yes
 	DEFINES += -DLOAD_BLD
 endif
-
-
 
 ################################################################################
 # Toolchain
@@ -120,12 +124,9 @@ GDB			:=	${CROSS_COMPILE}gdb
 include ${MAKE_HELPERS_DIRECTORY}unix.mk
 include ${MAKE_HELPERS_DIRECTORY}build_macros.mk
 include ${MAKE_HELPERS_DIRECTORY}defaults.mk
-################################################################################
-# Common sources and include directories
-################################################################################
-include lib/stdlib/stdlib.mk
 
-#INCLUDES		+= -Iinclude/bl31				\
+# Common includes #
+INCLUDES		+= \
 				-Iinclude/common			\
 				-Iinclude/common/${ARCH}		\
 				-Iinclude/drivers			\
@@ -148,7 +149,21 @@ include lib/stdlib/stdlib.mk
 				-Ilib/lz4                   \
 				${PLAT_INCLUDES}			\
 				${SPD_INCLUDES}				\
-				-Iinclude/tools_share       
+				-Iinclude/tools_share
+
+################################################################################
+# For AArch64, BL31 is  supported.
+################################################################################
+ifeq (${BOOT_CPU},aarch64)
+# When booting an EL3 payload, there is no need to compile the BL31 image nor
+# put it in the FIP.
+ifndef EL3_PAYLOAD_BASE
+NEED_BL31 := yes
+include bl31/bl31.mk
+endif
+else
+NEED_BL31 := no
+endif
 
 ################################################################################
 # Generic definitions
@@ -163,28 +178,38 @@ SPDS			:=	$(sort $(filter-out none, $(patsubst services/spd/%,%,$(wildcard servi
 # Platforms providing their own TBB makefile may override this value
 INCLUDE_TBBR_MK		:=	1               
 
-
-# Platform compatibility is not supported in AArch32
-ifeq (${BOOT_CPU},aarch64)
-# If the platform has not defined ENABLE_PLAT_COMPAT, then enable it by default
-#ifndef ENABLE_PLAT_COMPAT
-#ENABLE_PLAT_COMPAT := 1
-#endif
-#ifeq (${RELEASE_VER},0)
-#include plat/cvitek/$(CHIP_ARCH)/asic/platform.mk
-#endif
-# Include the platform compatibility helpers for PSCI
-#ifneq (${ENABLE_PLAT_COMPAT}, 0)
-#include plat/compat/plat_compat.mk
-#endif
-# Enable workarounds for selected Cortex-A53 errata
-ERRATA_A53_835769   :=  1
-ERRATA_A53_843419   :=  1
-ERRATA_A53_855873   :=  1
+################################################################################
+# Include SPD Makefile if one has been specified
+################################################################################
+ifneq (${ARCH},riscv)
+SPD := opteed
 endif
+ifneq (${SPD},none)
+ifeq (${ARCH},aarch32)
+	$(error "Error: SPD is incompatible with AArch32.")
+endif
+ifdef EL3_PAYLOAD_BASE
+        $(warning "SPD and EL3_PAYLOAD_BASE are incompatible build options.")
+        $(warning "The SPD and its BL32 companion will be present but ignored.")
+endif
+        # We expect to locate an spd.mk under the specified SPD directory
+        SPD_MAKE	:=	$(wildcard services/spd/${SPD}/${SPD}.mk)
 
-
-
+        ifeq (${SPD_MAKE},)
+                $(error Error: No services/spd/${SPD}/${SPD}.mk located)
+        endif
+        $(info Including ${SPD_MAKE})
+        include ${SPD_MAKE}
+        # If there's BL32 companion for the chosen SPD, we expect that the SPD's
+        # Makefile would set NEED_BL32 to "yes". In this case, the build system
+        # supports two mutually exclusive options:
+        # * BL32 is built from source: then BL32_SOURCES must contain the list
+        #   of source files to build BL32
+        # * BL32 is a prebuilt binary: then BL32 must point to the image file
+        #   that will be included in the FIP
+        # If both BL32_SOURCES and BL32 are defined, the binary takes precedence
+        # over the sources.
+endif
 
 ################################################################################
 # Include libraries' Makefile that are used in all BL
@@ -198,26 +223,24 @@ include lib/stack_protector/stack_protector.mk
 # This can be overridden by the platform.
 
 include lib/cpus/cpu-ops.mk
-#ifeq (${RELEASE_VER},0)
-#ifeq (${ARCH},aarch32)
-#NEED_BL32 := yes
+ifeq (${ARCH},aarch32)
+NEED_BL32 := yes
 ################################################################################
 # Build `AARCH32_SP` as BL32 image for AArch32
 ################################################################################
-#ifneq (${AARCH32_SP},none)
+ifneq (${AARCH32_SP},none)
 # We expect to locate an sp.mk under the specified AARCH32_SP directory
-#AARCH32_SP_MAKE	:=	$(wildcard bl32/${AARCH32_SP}/${AARCH32_SP}.mk)
+AARCH32_SP_MAKE	:=	$(wildcard bl32/${AARCH32_SP}/${AARCH32_SP}.mk)
 
-#ifeq (${AARCH32_SP_MAKE},)
-#  $(error Error: No bl32/${AARCH32_SP}/${AARCH32_SP}.mk located)
-#endif
+ifeq (${AARCH32_SP_MAKE},)
+  $(error Error: No bl32/${AARCH32_SP}/${AARCH32_SP}.mk located)
+endif
 
-#$(info Including ${AARCH32_SP_MAKE})
-#include ${AARCH32_SP_MAKE}
-#endif
+$(info Including ${AARCH32_SP_MAKE})
+include ${AARCH32_SP_MAKE}
+endif
 
-#endif
-#endif
+endif
 
 
 # Process TBB related flags
@@ -251,6 +274,10 @@ endif
 CRTTOOLPATH		?=	tools/cert_create
 CRTTOOL			?=	${CRTTOOLPATH}/cert_create${BIN_EXT}
 
+################################################################################
+# bl31/bl32 secure boot
+################################################################################
+FSBL_SECURE_BOOT_SUPPORT := 0
 
 ################################################################################
 # Convert building option
@@ -274,82 +301,14 @@ else
 $(error "BOOT_CPU=${BOOT_CPU} is not supported")
 endif
 
-################################################################################
-# BL2 Compilation Options
-################################################################################
-BL2_CPPFLAGS += \
-	${DEFINES} ${BL2_INCLUDES} \
-	-nostdinc \
-	-Wmissing-include-dirs -Werror
-
-################################################################################
-# BL31 Compilation Options
-################################################################################
-
-BL2_CFLAGS += -ggdb3 -gdwarf-2
-BL2_ASFLAGS += -g -Wa,--gdwarf-2
-
-BL31_ASFLAGS += -g -Wa,--gdwarf-2
-
-ifeq ($(notdir $(CC)),armclang)
-BL31_CFLAGS_aarch32	=	-target arm-arm-none-eabi -march=armv8-a
-BL31_CFLAGS_aarch64	=	-target aarch64-arm-none-eabi -march=armv8-a
-else ifneq ($(findstring clang,$(notdir $(CC))),)
-BL31_CFLAGS_aarch32	=	-target armv8a-none-eabi
-BL31_CFLAGS_aarch64	=	-target aarch64-elf
-else
-BL31_CFLAGS_aarch32	=	-march=armv8-a
-BL31_CFLAGS_aarch64	=	-march=armv8-a
+ifeq (${STORAGE_TYPE},emmc)
+$(eval $(call add_define,BOOT_FROM_EMMC))
 endif
-
-BL31_CFLAGS_aarch64	+=	-mstrict-align
-
-ASFLAGS_aarch32		=	-march=armv8-a
-ASFLAGS_aarch64		=	-march=armv8-a
-
-BL31_CPPFLAGS += \
-				${DEFINES} ${INCLUDES} \
-				-nostdinc \
-				-Wmissing-include-dirs -Werror
-
-BL31_ASFLAGS	+=	$(BL31_CPPFLAGS) $(ASFLAGS_$(ARCH))			\
-				-D__ASSEMBLY__ -ffreestanding 			\
-				-Wa,--fatal-warnings
-
-BL31_CFLAGS		+=	$(BL31_CPPFLAGS) $(BL31_CFLAGS_$(ARCH))		\
-				-ffreestanding -fno-builtin -Wall -std=gnu99	\
-				-Os -ffunction-sections -fdata-sections		\
-				-fno-delete-null-pointer-checks
-
-
-BL32_CPPFLAGS += \
-				${DEFINES} ${INCLUDES} \
-				-nostdinc \
-				-Wmissing-include-dirs -Werror
-
-BL32_ASFLAGS  += $(BL32_CPPFLAGS) $(ASFLAGS_$(ARCH))			\
-				-D__ASSEMBLY__ -ffreestanding 			\
-				-Wa,--fatal-warnings
-
-BL32_CFLAGS  +=	$(BL32_CPPFLAGS) $(BL31_CFLAGS_$(ARCH))		\
-				-ffreestanding -fno-builtin -Wall -std=gnu99	\
-				-Os -ffunction-sections -fdata-sections		\
-				-fno-delete-null-pointer-checks
-
-ifeq (${ERROR_DEPRECATED},0)
-    BL31_CFLAGS		+= 	-Wno-error=deprecated-declarations
-endif
-
-# Include the CPU specific operations makefile
-include lib/cpu/${BOOT_CPU}/cpu.mk
-
-BL2_INCLUDES += -Ibuild
-BL2_INCLUDES += -Iinclude/cpu
 
 ################################################################################
 # Build options checks
 ################################################################################
-ifeq ($(NEED_BL31),yes)
+
 $(eval $(call assert_boolean,COLD_BOOT_SINGLE_CPU))
 $(eval $(call assert_boolean,CREATE_KEYS))
 $(eval $(call assert_boolean,CTX_INCLUDE_AARCH32_REGS))
@@ -380,16 +339,16 @@ $(eval $(call assert_boolean,USE_TBBR_DEFS))
 $(eval $(call assert_boolean,WARMBOOT_ENABLE_DCACHE_EARLY))
 $(eval $(call assert_boolean,ENABLE_SPE_FOR_LOWER_ELS))
 $(eval $(call assert_boolean,ENABLE_COMPRESSION))
-$(eval $(call assert_boolean,ENABLE_TPU_SECURITY))
+# $(eval $(call assert_boolean,ENABLE_TPU_SECURITY))
 $(eval $(call assert_numeric,ARM_ARCH_MAJOR))
 $(eval $(call assert_numeric,ARM_ARCH_MINOR))
-endif
+
 ################################################################################
 # Add definitions to the cpp preprocessor based on the current build options.
 # This is done after including the platform specific makefile to allow the
 # platform to overwrite the default options
 ################################################################################
-ifeq ($(NEED_BL31),yes)
+
 $(eval $(call add_define,ARM_CCI_PRODUCT_ID))
 $(eval $(call add_define,ARM_ARCH_MAJOR))
 $(eval $(call add_define,ARM_ARCH_MINOR))
@@ -422,10 +381,10 @@ $(eval $(call add_define,USE_TBBR_DEFS))
 $(eval $(call add_define,WARMBOOT_ENABLE_DCACHE_EARLY))
 $(eval $(call add_define,ENABLE_SPE_FOR_LOWER_ELS))
 $(eval $(call add_define,ENABLE_COMPRESSION))
-$(eval $(call add_define,ENABLE_TPU_SECURITY))
+# $(eval $(call add_define,ENABLE_TPU_SECURITY))
 $(eval $(call add_define,NANDBOOT_V2))
 $(eval $(call add_define,BOOTFLOW_TYPE))
-endif
+
 
 ifeq ($(CONFIG_BOARD),"fpga")
 $(eval $(call add_define,CONFIG_BOARD_fpga))
@@ -476,18 +435,18 @@ endif
 $(eval $(call add_define,FSBL_SECURE_BOOT_SUPPORT))
 $(eval $(call add_define, USB_DL_BY_FSBL))
 
-#ifeq (${NEED_BL31},yes)
-# Add RTC_CORE_SRAM_BIN_PATH into cv_pm.c
-#$(info RTC_CORE_SRAM_BIN_PATH is '${RTC_CORE_SRAM_BIN_PATH}')
-#ifeq ($(filter clean %clean clean%,$(MAKECMDGOALS)),)
-#ifeq (,$(wildcard ${RTC_CORE_SRAM_BIN_PATH}))
-#$(error RTC_CORE_SRAM_BIN_PATH is not existed)
-#else
-#$(shell touch -c plat/cvitek/${CHIP_ARCH}/common/cv_pm.c > /dev/null)
-#endif
-#endif
-#$(eval $(call add_define_val,RTC_CORE_SRAM_BIN_PATH,'"${RTC_CORE_SRAM_BIN_PATH}"'))
-#endif
+# ifeq (${NEED_BL31},yes)
+# # Add RTC_CORE_SRAM_BIN_PATH into cv_pm.c
+# $(info RTC_CORE_SRAM_BIN_PATH is '${RTC_CORE_SRAM_BIN_PATH}')
+# ifeq ($(filter clean %clean clean%,$(MAKECMDGOALS)),)
+# ifeq (,$(wildcard ${RTC_CORE_SRAM_BIN_PATH}))
+# $(error RTC_CORE_SRAM_BIN_PATH is not existed)
+# else
+# $(shell touch -c plat/cvitek/${CHIP_ARCH}/common/cv_pm.c > /dev/null)
+# endif
+# endif
+# $(eval $(call add_define_val,RTC_CORE_SRAM_BIN_PATH,'"${RTC_CORE_SRAM_BIN_PATH}"'))
+# endif
 
 ################################################################################
 # Build targets
@@ -495,13 +454,30 @@ $(eval $(call add_define, USB_DL_BY_FSBL))
 .PHONY: all fip clean bl-check bl-build fake-blcp
 .SUFFIXES:
 
+################################################################################
+# Build BL31
+################################################################################
+
+ifeq (${NEED_BL31},yes)
+all: bl31
+BL31_SOURCES += ${SPD_SOURCES}
+$(eval $(call MAKE_BL,31,soc-fw))
+endif
+
+ifeq (${NEED_BL32},yes)
+all: bl32
+$(eval $(call MAKE_BL,32,tos-fw))
+endif
+
 export BUILD_PLAT NM
 
 
 all: bl2 fip blmacros
 
 include ${MAKE_HELPERS_DIRECTORY}fip.mk
+
 $(eval $(call MAKE_BL,2))
+
 # Convert '#define ...' to ELF symbols
 BLMACROS_LINKERFILE := make_helpers/get_macros.ld.S
 BLMACROS_ELF := ${BUILD_PLAT}/blmacros/blmacros.elf

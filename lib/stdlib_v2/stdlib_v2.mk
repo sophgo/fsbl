@@ -5,6 +5,7 @@
 #
 
 STDLIB_SRCS_v2	:=	$(addprefix lib/stdlib_v2/,	\
+			misc.c				\
 			abort.c				\
 			assert.c			\
 			exit.c				\
@@ -19,8 +20,11 @@ STDLIB_SRCS_v2	:=	$(addprefix lib/stdlib_v2/,	\
 			strncmp.c			\
 			strnlen.c			\
 			subr_prf.c			\
-			memcpy.S			\
 			timingsafe_bcmp.c)
 
-INCLUDES	+=	-Iinclude/lib/stdlib_v2		\
+ifneq (${ARCH},riscv)
+STDLIB_SRCS_v2 += $(addprefix lib/stdlib_v2/,memcpy.S)
+endif
+
+STDLIB_INCLUDES_V2	+=	-Iinclude/lib/stdlib_v2		\
 			-Iinclude/lib/stdlib_v2/sys

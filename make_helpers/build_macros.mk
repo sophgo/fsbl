@@ -149,6 +149,11 @@ $(OBJ): $(2) | bl$(3)_dirs
 
 endef
 
+define MAKE_O
+$(eval OBJ := $(1)/$(notdir $(2)))
+$(OBJ): $(2) | bl$(3)_dirs
+	cp $(2) $(OBJ)
+endef
 
 # MAKE_S builds an assembly source file and generates the dependency file
 #   $(1) = output directory
@@ -199,6 +204,10 @@ define MAKE_OBJS
         $(eval S_OBJS := $(filter %.S,$(REMAIN)))
         $(eval REMAIN := $(filter-out %.S,$(REMAIN)))
         $(eval $(foreach obj,$(S_OBJS),$(call MAKE_S,$(1),$(obj),$(3))))
+
+        $(eval O_OBJS := $(filter %.o,$(REMAIN)))
+        $(eval REMAIN := $(filter-out %.o,$(REMAIN)))
+        $(eval $(foreach obj,$(O_OBJS),$(call MAKE_O,$(1),$(obj),$(3))))
 
         $(and $(REMAIN),$(error Unexpected source files present: $(REMAIN)))
 endef
@@ -284,6 +293,7 @@ endef
 # end up with a line-feed characer at the end of the last c filename.
 # Also bear this issue in mind if extending the list of supported filetypes.
 define SOURCES_TO_OBJS
+        $(notdir $(filter %.o,$(1))) \
         $(notdir $(patsubst %.c,%.o,$(filter %.c,$(1)))) \
         $(notdir $(patsubst %.S,%.o,$(filter %.S,$(1))))
 endef

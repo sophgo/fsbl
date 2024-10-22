@@ -15,8 +15,8 @@ ifndef UNIX_MK
     DIR_DELIM := /
     PATH_SEP := :
 
-    FIPTOOL := ./plat/${CHIP_ARCH}/fiptool.py
-    FIPSIGN := ./plat/${CHIP_ARCH}/fipsign.py
+    FIPTOOL := ./plat/cvitek/${CHIP_ARCH}/common/fiptool.py
+    FIPSIGN := ./plat/cvitek/${CHIP_ARCH}/common/fipsign.py
 
     # These defines provide Unix style equivalents of the shell commands
     # required by the Trusted Firmware build environment.

@@ -9,7 +9,7 @@
 #include <assert.h>
 #include <debug.h>
 
-#include "cv_private.h"
+// #include "cv_private.h"
 
 /* Putchar() should either return the character printed or EOF in case of error.
  * Our current console_putc() function assumes success and returns the
