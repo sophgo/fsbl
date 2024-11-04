@@ -688,10 +688,10 @@ retry_from_flash:
 		if(load_bl32(retry) < 0)
 			continue;
 
-		if (load_loader_2nd(retry, &loader_2nd_entry) < 0)
+		if (load_blmcu(retry) < 0)
 			continue;
 
-		if(load_blmcu(retry) < 0)
+		if (load_loader_2nd(retry, &loader_2nd_entry) < 0)
 			continue;
 
 		break;
