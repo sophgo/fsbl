@@ -511,6 +511,16 @@ static void bm_emmc_hw_reset(void)
 		;
 }
 
+#define REG_CLK_BYP_H1A4	0x281021a4
+
+static int emmc_get_src_clk(void)
+{
+	if (mmio_read_32(REG_CLK_BYP_H1A4) & BIT(7))
+		return 25000000;
+	else
+		return 383333334;
+}
+
 #define G11_IO_BASE     0x28104b00
 #define G8_IO_BASE		0x28104800
 #define DRIVE_MASK		(0xf << 8)
@@ -539,7 +549,7 @@ void bm_emmc_phy_init(void)
 
 void bm_emmc_init(void)
 {
-	bm_params.clk_rate = 375000000;
+	bm_params.clk_rate = emmc_get_src_clk();
 	NOTICE("EMI/%d/%d.", bm_params.clk_rate, EMMC_TRAN_FREQ);
 	bm_emmc_phy_init();
 	if (emmc_init(&bm_emmc_ops, EMMC_TRAN_FREQ, bm_params.bus_width, bm_params.flags) < 0)

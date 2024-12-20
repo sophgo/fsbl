@@ -199,6 +199,7 @@ enum boot_src {
 	BOOT_SRC_SPI_NOR = 0x2 | BOOT_SRC_TAG,
 	BOOT_SRC_EMMC = 0x3 | BOOT_SRC_TAG,
 	BOOT_SRC_RTC_NOR = 0x5 | BOOT_SRC_TAG,
+	BOOT_SRC_PCIE = 0x7 | BOOT_SRC_TAG,
 
 	// Download
 	BOOT_SRC_SD = 0xA0 | BOOT_SRC_TAG,
@@ -228,17 +229,15 @@ union sw_info {
 } __packed;
 
 struct _time_records {
-	uint16_t fsbl_start;
+	uint16_t bl2_start;
 	uint16_t ddr_init_start;
 	uint16_t ddr_init_end;
-	uint16_t release_blcp_2nd;
-	uint16_t load_loader_2nd_end;
-	uint16_t fsbl_decomp_start;
-	uint16_t fsbl_decomp_end;
-	uint16_t fsbl_exit;
+	uint16_t blmcu_start;
+	uint16_t bl31_start;
+	uint16_t bl32_start;
 	uint16_t uboot_start;
-	uint16_t bootcmd_start;
-	uint16_t decompress_kernel_start;
+	uint16_t uboot_cmd_start;
+	uint16_t kernel_decompress_start;
 	uint16_t kernel_start;
 	uint16_t kernel_run_init_start;
 } __packed;
@@ -304,7 +303,7 @@ extern struct _time_records *time_records;
 #define SPIF_BASE 0x10000000
 #define SPIF1_BASE 0x05400000
 
-#define AXI_SRAM_BASE (TPU_SRAM_BASE + TPU_SRAM_SIZE)
+#define AXI_SRAM_BASE (TPU_SRAM_BASE + TPU_SRAM_SIZE) // 0x25050000
 #define AXI_SRAM_SIZE 0x100
 #define AXI_SRAM_RTOS_OFS 0x7C
 #define AXI_SRAM_RTOS_BASE (AXI_SRAM_BASE + AXI_SRAM_RTOS_OFS)
@@ -414,10 +413,10 @@ extern struct _time_records *time_records;
 #define MAGIC_NUM_USB_DL 0x4D474E31 // MGN1
 #define MAGIC_NUM_SD_DL 0x4D474E32 // MGN2
 
-#define BOOT_LOG_LEN_ADDR (BOOT_SOURCE_FLAG_ADDR + BOOT_SOURCE_FLAG_SIZE) // 0x25045008
+#define BOOT_LOG_LEN_ADDR (BOOT_SOURCE_FLAG_ADDR + BOOT_SOURCE_FLAG_SIZE) // 0x25050008
 #define BOOT_LOG_LEN_SIZE 4
 
-#define TIME_RECORDS_ADDR (AXI_SRAM_BASE + 0x1c) // 0x2504501c
+#define TIME_RECORDS_ADDR (AXI_SRAM_BASE + 0x10) // 0x25050010
 
 // only for debugging
 #define ATF_DBG_REG (BOOT_LOG_LEN_ADDR + BOOT_LOG_LEN_SIZE)

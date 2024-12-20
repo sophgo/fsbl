@@ -159,7 +159,6 @@ void switch_el3_to_el2_ns(uintptr_t bl2_entry)
 	write_cnthp_ctl_el2(CNTHP_CTL_RESET_VAL & ~(CNTHP_CTL_ENABLE_BIT));
 
 	ATF_STATE = ATF_STATE_BL2_MAIN + 1;
-	time_records->fsbl_exit = read_time_ms();
 
 	call_with_eret(bl2_entry);
 

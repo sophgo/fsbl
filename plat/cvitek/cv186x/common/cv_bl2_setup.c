@@ -18,7 +18,7 @@
 #define TPU_BONDING_LMT0 0x1
 #define TPU_BONDING_LMT1 0x2
 
-extern struct rom_api p_rom_api;
+extern struct rom_api *p_rom_api;
 
 void plat_panic_handler(void)
 {
@@ -100,7 +100,7 @@ void reset_c906l(uintptr_t reset_address)
 
 void setup_dl_flag(void)
 {
-	uint32_t v = p_rom_api.get_boot_src();
+	uint32_t v = p_rom_api->get_boot_src();
 
 	switch (v) {
 	case BOOT_SRC_SD:
@@ -360,12 +360,18 @@ void enable_top_wdt(void)
 
 void platform_setup(void)
 {
-	// set uart0, emmc, sd0 bypass
-	mmio_setbits_32(0x281021a4,
-			1 << 25 | 1 << 8 | 1 << 7 | 1 << 2 | 1 << 1);
+	time_records->bl2_start = read_time_ms();
+	VERBOSE("\n#bl2 start at: %d ms#\n", time_records->bl2_start);
+	// set emmc, sd0 bypass
+	mmio_setbits_32(0x281021a4, 1 << 8 | 1 << 7 | 1 << 2 | 1 << 1);
+
+	// set uart0 clk to pll
+	mmio_clrbits_32(0x281021a4, 1 << 25);
+
+	console_init(PLAT_BOOT_UART_BASE, PLAT_BM_BOOT_UART_CLK_IN_HZ,
+		     PLAT_BM_CONSOLE_BAUDRATE);
 
 	config_rgmii_power();
-	time_records->fsbl_start = read_time_ms();
 	NOTICE("\nFSBL %s:%s\n", version_string, build_message);
 	INFO("sw_info=0x%x\n", get_sw_info()->value);
 

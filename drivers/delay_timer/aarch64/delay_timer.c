@@ -82,7 +82,7 @@ uint32_t get_random_from_timer(uint32_t base)
 
 void timer_init(void)
 {
-	write_cntfrq_el0(SYS_COUNTER_FREQ_IN_SECOND);
+	/* write_cntfrq_el0(SYS_COUNTER_FREQ_IN_SECOND); */
 }
 
 uint32_t read_count_tick(void)

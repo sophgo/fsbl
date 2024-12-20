@@ -6,6 +6,7 @@
 USE_COHERENT_MEM := 1
 INCLUDES		+=	-Iinclude/bl32/cvsp \
 				-Iservices/spd/opteed \
+				-Iinclude/arch/	\
 				-Iinclude/drivers/cvitek/$(CHIP_ARCH)/tpu
 
 BL32_SOURCES	+=	bl32/cvsp/cvsp_main.c			\
@@ -17,8 +18,7 @@ BL32_SOURCES	+=	bl32/cvsp/cvsp_main.c			\
 				common/aarch64/early_exceptions.S	\
 				lib/locks/exclusive/aarch64/spinlock.S
 
-BL32_SOURCES	+= drivers/delay_timer/delay_timer.c		\
-				drivers/delay_timer/generic_delay_timer.c	\
+BL32_SOURCES	+= drivers/delay_timer/${BOOT_CPU}/delay_timer.c		\
 				bl32/cvsp/cvsp_private.c			\
 				bl32/cvsp/cvsp_debug.c				\
 

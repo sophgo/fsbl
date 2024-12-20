@@ -18,8 +18,9 @@
 #include <runtime_svc.h>
 #include <string.h>
 #include <mmio.h>
-#include "timer_dw.h"
+#include "delay_timer.h"
 
+struct _time_records *time_records = (void *)TIME_RECORDS_ADDR;
 
 #if ENABLE_RUNTIME_INSTRUMENTATION
 PMF_REGISTER_SERVICE_SMC(rt_instr_svc, PMF_RT_INSTR_SVC_ID,
@@ -73,6 +74,8 @@ void bl31_lib_init(void)
  ******************************************************************************/
 void bl31_main(void)
 {
+	time_records->bl31_start = read_time_ms();
+	VERBOSE("\n#bl31_start at %dms#\n", time_records->bl31_start);
 	//ATF_STATE = ATF_STATE_BL31_MAIN;
 	
 /*#ifdef BL_USE_DW_TIMER
@@ -125,6 +128,8 @@ void bl31_main(void)
 #ifdef BL_USE_DW_TIMER
 	// dw_timer_stop(TIMER_ID2, (uint32_t *)BL31_TIME_ADDR);
 #endif
+	time_records->uboot_start = read_time_ms();
+	VERBOSE("\n#uboot_start at %dms#\n", time_records->uboot_start);
 }
 
 /*******************************************************************************
