@@ -27,7 +27,7 @@ uint32_t adc_val_ddr_array_max = 0;
 uint32_t adc_val_ddr;
 uint32_t vol_val_ddr;
 
-struct rom_api p_rom_api = {
+struct rom_api rom_api_peri = {
 	.get_boot_src = (void *)0x0000000029400020,
 	.set_boot_src = (void *)0x0000000029400040,
 	.load_image = (void *)0x0000000029400060,
@@ -37,6 +37,19 @@ struct rom_api p_rom_api = {
 	.verify_rsa = (void *)0x00000000294000e0,
 	.cryptodma_aes_decrypt = (void *)0x0000000029400100
 };
+
+struct rom_api rom_api_nor = {
+	.get_boot_src = (void *)0x0000000005400020,
+	.set_boot_src = (void *)0x0000000005400040,
+	.load_image = (void *)0x0000000005400060,
+	.flash_init = (void *)0x0000000005400080,
+	.image_crc = (void *)0x00000000054000a0,
+	.get_number_of_retries = (void *)0x00000000054000c0,
+	.verify_rsa = (void *)0x00000000054000e0,
+	.cryptodma_aes_decrypt = (void *)0x0000000005400100
+};
+
+struct rom_api *p_rom_api = &rom_api_peri;
 
 //#define BL2_USE_CLI
 //#define BL2_ACCESS_BT256MB //bl2 cpu access bigthan 256M byte addrspace
@@ -75,14 +88,7 @@ void rom_api_redirect(void)
 	if (mmio_read_32(REG_TOP_CONF_INFO) & 0x00100000)
 		return;
 
-	p_rom_api.get_boot_src = (void *)0x0000000005400020;
-	p_rom_api.set_boot_src = (void *)0x0000000005400040;
-	p_rom_api.load_image = (void *)0x0000000005400060;
-	p_rom_api.flash_init = (void *)0x0000000005400080;
-	p_rom_api.image_crc = (void *)0x00000000054000a0;
-	p_rom_api.get_number_of_retries = (void *)0x00000000054000c0;
-	p_rom_api.verify_rsa = (void *)0x00000000054000e0;
-	p_rom_api.cryptodma_aes_decrypt = (void *)0x0000000005400100;
+	p_rom_api = &rom_api_nor;
 }
 
 #if BL2_LOAD_IMAGE_SPLIT
@@ -110,7 +116,7 @@ int bl2_load_image_split(void *buf, uint32_t offset, size_t image_size, int retr
 			split_end = addr + ALIGNMENT_THRESHOLD;
 
 		INFO("Start: %p, End: %p\n", split_start, split_end);
-		ret = p_rom_api.load_image(split_start, offset, split_end - split_start, retry_num);
+		ret = p_rom_api->load_image(split_start, offset, split_end - split_start, retry_num);
 		if (ret < 0) {
 			ERROR("fail to load image split: %d.\n", ret);
 			return ret;
@@ -131,7 +137,7 @@ int load_param2(int retry)
 #if BL2_LOAD_IMAGE_SPLIT
 	ret = bl2_load_image_split(&fip_param2, fip_param1->param2_loadaddr, PARAM2_SIZE, retry);
 #else
-	ret = p_rom_api.load_image(&fip_param2, fip_param1->param2_loadaddr, PARAM2_SIZE, retry);
+	ret = p_rom_api->load_image(&fip_param2, fip_param1->param2_loadaddr, PARAM2_SIZE, retry);
 #endif
 	if (ret < 0) {
 		return ret;
@@ -142,7 +148,7 @@ int load_param2(int retry)
 		return -1;
 	}
 
-	crc = p_rom_api.image_crc(&fip_param2.reserved1, sizeof(fip_param2) - 12);
+	crc = p_rom_api->image_crc(&fip_param2.reserved1, sizeof(fip_param2) - 12);
 	if (crc != fip_param2.param2_cksum) {
 		ERROR("param2_cksum (0x%x/0x%x)\n", crc, fip_param2.param2_cksum);
 		return -1;
@@ -163,7 +169,7 @@ int load_ddr(void)
 	int retry = 0;
 
 retry_from_flash:
-	for (retry = 0; retry < p_rom_api.get_number_of_retries(); retry++) {
+	for (retry = 0; retry < p_rom_api->get_number_of_retries(); retry++) {
 		if (load_param2(retry) < 0)
 			continue;
 
@@ -173,14 +179,14 @@ retry_from_flash:
 		break;
 	}
 
-	if (retry >= p_rom_api.get_number_of_retries()) {
-		switch (p_rom_api.get_boot_src()) {
+	if (retry >= p_rom_api->get_number_of_retries()) {
+		switch (p_rom_api->get_boot_src()) {
 		case BOOT_SRC_UART:
 		case BOOT_SRC_SD:
 		case BOOT_SRC_USB:
 			WARN("DL cancelled. Load flash. (%d).\n", retry);
 			// Continue to boot from flash if boot from external source
-			p_rom_api.flash_init();
+			p_rom_api->flash_init();
 			goto retry_from_flash;
 		default:
 			ERROR("Failed to load DDR param (%d).\n", retry);
@@ -189,6 +195,7 @@ retry_from_flash:
 	}
 
 	time_records->ddr_init_start = read_time_ms();
+	VERBOSE("\n#ddr_int_start at %d ms#\n", time_records->ddr_init_start);
 	// read adc3 value
 	PINMUX_CONFIG(ADC3, ADC3, G12);         // gpio3_26
 	// mmio_clrbits_32(0x28104c34, 1 << 14);
@@ -219,6 +226,7 @@ retry_from_flash:
 #endif
 	#endif
 	time_records->ddr_init_end = read_time_ms();
+	VERBOSE("\n#ddr_int_end at %d ms#\n", time_records->ddr_init_end);
 	return 0;
 }
 
@@ -228,7 +236,6 @@ int load_blcp_2nd(int retry)
 	int ret = -1;
 
 	// if no blcp_2nd, release_blcp_2nd should be ddr_init_end
-	time_records->release_blcp_2nd = time_records->ddr_init_end;
 
 	NOTICE("C2S/0x%x/0x%x/0x%x.\n", fip_param2.blcp_2nd_loadaddr, fip_param2.blcp_2nd_runaddr,
 	       fip_param2.blcp_2nd_size);
@@ -249,7 +256,7 @@ int load_blcp_2nd(int retry)
 	}
 
 // #ifdef USB_DL_BY_FSBL
-// 	if (p_rom_api.get_boot_src() == BOOT_SRC_USB)
+// 	if (p_rom_api->get_boot_src() == BOOT_SRC_USB)
 // 		ret = load_image_by_usb((void *)(uintptr_t)fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_loadaddr,
 // 					fip_param2.blcp_2nd_size, retry);
 // 	else
@@ -258,14 +265,14 @@ int load_blcp_2nd(int retry)
 	ret = bl2_load_image_split((void *)(uintptr_t)fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_loadaddr,
 				   fip_param2.blcp_2nd_size, retry);
 #else
-	ret = p_rom_api.load_image((void *)(uintptr_t)fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_loadaddr,
+	ret = p_rom_api->load_image((void *)(uintptr_t)fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_loadaddr,
 				   fip_param2.blcp_2nd_size, retry);
 #endif
 	if (ret < 0) {
 		return ret;
 	}
 
-	crc = p_rom_api.image_crc((void *)(uintptr_t)fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_size);
+	crc = p_rom_api->image_crc((void *)(uintptr_t)fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_size);
 	if (crc != fip_param2.blcp_2nd_cksum) {
 		ERROR("blcp_2nd_cksum (0x%x/0x%x)\n", crc, fip_param2.blcp_2nd_cksum);
 		return -1;
@@ -282,7 +289,6 @@ int load_blcp_2nd(int retry)
 	rtos_base = mmio_read_32(AXI_SRAM_RTOS_BASE);
 	init_comm_info();
 
-	time_records->release_blcp_2nd = read_time_ms();
 	if (rtos_base == CVI_RTOS_MAGIC_CODE) {
 		mmio_write_32(AXI_SRAM_RTOS_BASE, fip_param2.blcp_2nd_runaddr);
 	} else {
@@ -317,7 +323,7 @@ int load_monitor(int retry, uint64_t *monitor_entry)
 	}
 
 // #ifdef USB_DL_BY_FSBL
-// 	if (p_rom_api.get_boot_src() == BOOT_SRC_USB)
+// 	if (p_rom_api->get_boot_src() == BOOT_SRC_USB)
 // 		ret = load_image_by_usb((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_loadaddr,
 // 					fip_param2.monitor_size, retry);
 // 	else
@@ -326,14 +332,14 @@ int load_monitor(int retry, uint64_t *monitor_entry)
 	ret = bl2_load_image_split((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_loadaddr,
 				   fip_param2.monitor_size, retry);
 #else
-	ret = p_rom_api.load_image((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_loadaddr,
+	ret = p_rom_api->load_image((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_loadaddr,
 				   fip_param2.monitor_size, retry);
 #endif
 	if (ret < 0) {
 		return ret;
 	}
 
-	crc = p_rom_api.image_crc((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_size);
+	crc = p_rom_api->image_crc((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_size);
 	if (crc != fip_param2.monitor_cksum) {
 		ERROR("monitor_cksum (0x%x/0x%x)\n", crc, fip_param2.monitor_cksum);
 		return -1;
@@ -377,7 +383,7 @@ int load_bl32(int retry)
 	}
 
 // #ifdef USB_DL_BY_FSBL
-// 	if (p_rom_api.get_boot_src() == BOOT_SRC_USB)
+// 	if (p_rom_api->get_boot_src() == BOOT_SRC_USB)
 // 		ret = load_image_by_usb((void *)(uintptr_t)fip_param2.bl32_runaddr, fip_param2.monitor_loadaddr,
 // 					fip_param2.bl32_size, retry);
 // 	else
@@ -386,14 +392,14 @@ int load_bl32(int retry)
 	ret = bl2_load_image_split((void *)(uintptr_t)fip_param2.bl32_runaddr, fip_param2.bl32_loadaddr,
 				   fip_param2.bl32_size, retry);
 #else
-	ret = p_rom_api.load_image((void *)(uintptr_t)fip_param2.bl32_runaddr, fip_param2.bl32_loadaddr,
+	ret = p_rom_api->load_image((void *)(uintptr_t)fip_param2.bl32_runaddr, fip_param2.bl32_loadaddr,
 				   fip_param2.bl32_size, retry);
 #endif
 	if (ret < 0) {
 		return ret;
 	}
 
-	crc = p_rom_api.image_crc((void *)(uintptr_t)fip_param2.bl32_runaddr, fip_param2.bl32_size);
+	crc = p_rom_api->image_crc((void *)(uintptr_t)fip_param2.bl32_runaddr, fip_param2.bl32_size);
 	if (crc != fip_param2.bl32_cksum) {
 		ERROR("monitor_cksum (0x%x/0x%x)\n", crc, fip_param2.bl32_cksum);
 		return -1;
@@ -428,14 +434,14 @@ int load_blmcu(int retry)
 	ret = bl2_load_image_split((void *)(uintptr_t)fip_param2.blmcu_runaddr, fip_param2.blmcu_loadaddr,
 				   fip_param2.blmcu_size, retry);
 #else
-	ret = p_rom_api.load_image((void *)(uintptr_t)fip_param2.blmcu_runaddr, fip_param2.blmcu_loadaddr,
+	ret = p_rom_api->load_image((void *)(uintptr_t)fip_param2.blmcu_runaddr, fip_param2.blmcu_loadaddr,
 				   fip_param2.blmcu_size, retry);
 #endif
 	if (ret < 0) {
 		return ret;
 	}
 
-	crc = p_rom_api.image_crc((void *)(uintptr_t)fip_param2.blmcu_runaddr, fip_param2.blmcu_size);
+	crc = p_rom_api->image_crc((void *)(uintptr_t)fip_param2.blmcu_runaddr, fip_param2.blmcu_size);
 	if (crc != fip_param2.blmcu_cksum) {
 		ERROR("blmcu_cksum (0x%x/0x%x)\n", crc, fip_param2.blmcu_cksum);
 		return -1;
@@ -450,8 +456,9 @@ int load_blmcu(int retry)
 	mmio_write_32(0x28100248, 0x1);
 	mmio_write_32(0x05025020, 0x5200080);
 	mmio_write_32(0x05025024, 0x5200000);
-	mmio_write_32(0x05025018, 0x1fffff);
 
+	time_records->blmcu_start = read_time_ms();
+	VERBOSE("\n#blmcu start at %dms#\n", time_records->blmcu_start);
 	NOTICE("BLMCU.E.\n");
 
 	return 0;
@@ -472,14 +479,14 @@ int load_loader_2nd(int retry, uint64_t *loader_2nd_entry)
 	NOTICE("L2/0x%lx.\n", fip_param2.loader_2nd_loadaddr);
 
 // #ifdef USB_DL_BY_FSBL
-// 	if (p_rom_api.get_boot_src() == BOOT_SRC_USB)
+// 	if (p_rom_api->get_boot_src() == BOOT_SRC_USB)
 // 		ret = load_image_by_usb(loader_2nd_header, fip_param2.loader_2nd_loadaddr, BLOCK_SIZE, retry);
 // 	else
 // #endif
 #if BL2_LOAD_IMAGE_SPLIT
 	ret = bl2_load_image_split(loader_2nd_header, fip_param2.loader_2nd_loadaddr, BLOCK_SIZE, retry);
 #else
-	ret = p_rom_api.load_image(loader_2nd_header, fip_param2.loader_2nd_loadaddr, BLOCK_SIZE, retry);
+	ret = p_rom_api->load_image(loader_2nd_header, fip_param2.loader_2nd_loadaddr, BLOCK_SIZE, retry);
 #endif
 	if (ret < 0) {
 		return ret;
@@ -510,20 +517,20 @@ int load_loader_2nd(int retry, uint64_t *loader_2nd_entry)
 	}
 
 // #ifdef USB_DL_BY_FSBL
-// 	if (p_rom_api.get_boot_src() == BOOT_SRC_USB)
+// 	if (p_rom_api->get_boot_src() == BOOT_SRC_USB)
 // 		ret = load_image_by_usb(image_buf, fip_param2.loader_2nd_loadaddr, reading_size, retry);
 // 	else
 // #endif
 #if BL2_LOAD_IMAGE_SPLIT
 	ret = bl2_load_image_split(image_buf, fip_param2.loader_2nd_loadaddr, reading_size, retry);
 #else
-	ret = p_rom_api.load_image(image_buf, fip_param2.loader_2nd_loadaddr, reading_size, retry);
+	ret = p_rom_api->load_image(image_buf, fip_param2.loader_2nd_loadaddr, reading_size, retry);
 #endif
 	if (ret < 0) {
 		return ret;
 	}
 
-	crc = p_rom_api.image_crc(image_buf + cksum_offset, loader_2nd_header->size - cksum_offset);
+	crc = p_rom_api->image_crc(image_buf + cksum_offset, loader_2nd_header->size - cksum_offset);
 	if (crc != loader_2nd_header->cksum) {
 		ERROR("loader_2nd_cksum (0x%x/0x%x)\n", crc, loader_2nd_header->cksum);
 		return -1;
@@ -536,11 +543,9 @@ int load_loader_2nd(int retry, uint64_t *loader_2nd_entry)
 		return ret;
 	}
 
-	time_records->load_loader_2nd_end = read_time_ms();
 
 	sys_switch_all_to_pll();
 
-	time_records->fsbl_decomp_start = read_time_ms();
 	if (comp_type) {
 		size_t dst_size = DECOMP_DST_SIZE;
 
@@ -561,7 +566,6 @@ int load_loader_2nd(int retry, uint64_t *loader_2nd_entry)
 	}
 
 	flush_dcache_range(loader_2nd_header->runaddr, reading_size);
-	time_records->fsbl_decomp_end = read_time_ms();
 	NOTICE("Loader_2nd loaded.\n");
 
 	*loader_2nd_entry = loader_2nd_header->runaddr + sizeof(struct loader_2nd_header);
@@ -641,20 +645,52 @@ int load_oem_info(void)
 }
 #endif
 
+static int load_param1(int retry)
+{
+       uint32_t fip_param1_size = PARAM1_SIZE;
+       int ret = 0;
+
+       ret = p_rom_api->load_image(fip_param1, 0, fip_param1_size, retry);
+       if (ret < 0) {
+               ERROR("load param1 (%d)\n", ret);
+               return ret;
+       }
+
+       if (fip_param1->magic1 != FIP_PARAM1_MAGIC1) {
+               ERROR("PARAM1 magic (0x%lx)\n", fip_param1->magic1);
+               return -1;
+       }
+
+       return ret;
+}
+
 void fip_src_check(void)
 {
-	if (p_rom_api.get_boot_src() != BOOT_SRC_RTC_NOR)
+	int retry = 0;
+
+	if (p_rom_api->get_boot_src() != BOOT_SRC_RTC_NOR)
 		return;
 
+	mmio_setbits_32(PCIE_BOOT_REG, 0x3 << 16);
 	NOTICE("Waiting for boot image in position\n");
 	while (1) {
+		feed_dog();
 		if(mmio_read_32(PCIE_BOOT_REG) & 0x10) {
 			NOTICE("The image is in position\n");
-			mmio_clrbits_32(PCIE_BOOT_REG, 0x10);
+			mmio_clrbits_32(PCIE_BOOT_REG, 0x10010);
+			p_rom_api->set_boot_src(BOOT_SRC_PCIE);
+
+			inv_dcache_range(0x102000000, 0x80000);
+
+			for (retry = 0; retry < p_rom_api->get_number_of_retries(); retry++) {
+				if (load_param1(retry) < 0)
+					continue;
+				if (load_param2(retry) < 0)
+					continue;
+				break;
+			}
 			break;
 		}
-
-		feed_dog();
 		mdelay(100);
 	}
 }
@@ -672,11 +708,12 @@ int load_rest(void)
 	sys_pll_init();
 
 retry_from_flash:
-	for (retry = 0; retry < p_rom_api.get_number_of_retries(); retry++) {
+	for (retry = 0; retry < p_rom_api->get_number_of_retries(); retry++) {
 		mmio_write_32(0x05025018, 0x1ffffd);
 #ifdef	BOOT_FROM_EMMC
-		if (load_oem_info() < 0)
-			ERROR("Fail to load OEM info.\n");
+		if (p_rom_api->get_boot_src() != BOOT_SRC_PCIE)
+			if (load_oem_info() < 0)
+				ERROR("Fail to load OEM info.\n");
 #endif
 
 		if (load_blcp_2nd(retry) < 0)
@@ -694,17 +731,19 @@ retry_from_flash:
 		if (load_loader_2nd(retry, &loader_2nd_entry) < 0)
 			continue;
 
+		//MCU reset shoule deassert after image loaded from nor flash
+		mmio_write_32(0x05025018, 0x1fffff);
 		break;
 	}
 
-	if (retry >= p_rom_api.get_number_of_retries()) {
-		switch (p_rom_api.get_boot_src()) {
+	if (retry >= p_rom_api->get_number_of_retries()) {
+		switch (p_rom_api->get_boot_src()) {
 		case BOOT_SRC_UART:
 		case BOOT_SRC_SD:
 		case BOOT_SRC_USB:
 			WARN("DL cancelled. Load flash. (%d).\n", retry);
 			// Continue to boot from flash if boot from external source
-			p_rom_api.flash_init();
+			p_rom_api->flash_init();
 			goto retry_from_flash;
 		default:
 			ERROR("Failed to load rest (%d).\n", retry);

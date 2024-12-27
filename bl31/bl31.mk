@@ -79,7 +79,7 @@ BL31_CFLAGS_aarch64	=	-march=armv8-a
 endif
 
 BL31_CFLAGS_aarch64	+=	-mstrict-align
-BL31_CFLAGS_aarch64	+=	-fno-stack-protector
+BL31_CFLAGS_aarch64	+=	-fno-stack-protector -Wno-error=array-bounds
 
 ASFLAGS_aarch32		=	-march=armv8-a
 ASFLAGS_aarch64		=	-march=armv8-a

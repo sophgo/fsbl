@@ -106,9 +106,14 @@ enum board_ddr_type_e {
 //#define FULL_MEM_BIST
 //#define FULL_MEM_BIST_FOREVER
 
-//#define DBG_INFO_L1//output basic calibration result
-//#define DBG_INFO_L2//output detail calibration info
-//#define DBG_INFO_L3//output all debug info
+#define WRLVL_SW_MODE
+#define SW2D_DEBUG_MODE
+//#define DDR_CLK_SSC_EN
+//#define SHOW_DDR_INIT_TIME
+
+//#define DBG_INFO_L1
+//#define DBG_INFO_L2
+//#define DBG_INFO_L3
 
 //debug log define
 //#define DBG_SHMOO_TX_LEGACY
@@ -116,65 +121,65 @@ enum board_ddr_type_e {
 //#define DDR_SHMOO_LOG_RX
 //#define DDR_SHMOO_LOG_TX
 
-#define MASK_SHIFT_FW_1T //OK
+#define MASK_SHIFT_FW_1T
 //#define AUTO_GATED
 //#define HALF_FREQ
 
-#define DDR_OENZ_ALWAY_LOW //OK
-#define DDR_CLOSE_SYS_AP //OK
-//#define DDR_ODTEN_EXTO_24UI  //OK
-#define DDR_RDCLK_ALWAY_ON  //OK
-//#define ODTEN_ENLARGE_4UI  //OK
+#define DDR_OENZ_ALWAY_LOW
+#define DDR_CLOSE_SYS_AP
+//#define DDR_ODTEN_EXTO_24UI
+#define DDR_RDCLK_ALWAY_ON
+//#define ODTEN_ENLARGE_4UI
 
-//#define DDR_TRAIN_FIX_VREF //when shmoo need close //OK
+//#define DDR_TRAIN_FIX_VREF //when shmoo need close
 #ifdef DDR_TRAIN_FIX_VREF
-#define DDR_TRAIN_VREF_VAL	(0x21)// fixed vref to training  //OK
+#define DDR_TRAIN_VREF_VAL	(0x21)// fixed vref to training
 #endif
 
 /*DDR4 feature define*/
 #if (defined(DDR4_X8) || defined(DDR4_X16) || defined(DDR_AUTO))
-#define DDR4_OENZ_DQS_SHIFT2 //OK
-#define DDR4_ODT_EN_EXTEND2  //OK
-#define DDR4_NO_DODT  //OK
+#define DDR4_OENZ_DQS_SHIFT2
+#define DDR4_ODT_EN_EXTEND2
+#define DDR4_NO_DODT
 
-//#define DDR4_CLOSE_DDRC_OPT//disable ddr4 opt function //OK
-#define DDR4_CONFIG_CTLE_HIGH //3200,3733    //OK
-//#define DDR4_CONFIG_CTLE_LOW  //1600,2400  //OK
-//#define DDR4_CONFIG_ODT48 //OK
-//#define DDR4_CONFIG_ODT60 //OK
-//#define DDR4_CONFIG_ODT34 //OK
-#define DDR4_CONFIG_ODT40 //OK
+//#define DDR4_CLOSE_DDRC_OPT//disable ddr4 opt function
+#define DDR4_CONFIG_CTLE_HIGH //3200,3733
+//#define DDR4_CONFIG_CTLE_LOW  //1600,2400
+//#define DDR4_CONFIG_ODT48
+//#define DDR4_CONFIG_ODT60
+//#define DDR4_CONFIG_ODT34
+#define DDR4_CONFIG_ODT40
 
-//#define DDR4_CLOSE_SYS_DBI //OK
-//#define DDR4_ADDRMAP_N //OK
+//#define DDR4_CLOSE_SYS_DBI
+//#define DDR4_ADDRMAP_N
 
-#define DDR4_USE_LP4RXCFG //OK
+#define DDR4_USE_LP4RXCFG
 
-//#define DDR4_ADD_FIX_VREF //OK
-//#define DDR4_RX_VREF_OFFSET (-11)// fixed offset add when trained //OK
+//#define DDR4_ADD_FIX_VREF
+//#define DDR4_RX_VREF_OFFSET (-11)// fixed offset add when trained
 
 /*shmoo should eanble DBI & disable fix vref */
 #if defined(DDR_SHMOO_LOG_RX) || defined(DDR_SHMOO_LOG_TX)
-//#undef DDR4_CLOSE_SYS_DBI //OK
-#undef DDR_TRAIN_FIX_VREF //OK
-#undef DDR4_ADD_FIX_VREF //OK
+//#undef DDR4_CLOSE_SYS_DBI
+#undef DDR_TRAIN_FIX_VREF
+#undef DDR4_ADD_FIX_VREF
 #endif
 
 #endif//defined(DDR4_X8) || defined(DDR4_X16)
 
 /*LPDDR4/4x feature define*/
 #if (defined(LPDDR4) || defined(LPDDR4X) || defined(DDR_AUTO))
-#define LP4_4X_ODT_EN_EXTEND0 //OK
+#define LP4_4X_ODT_EN_EXTEND0
 
-//#define DBG_SHMOO_CA //OK
+//#define DBG_SHMOO_CA
 
-//#define DDR_SHMOO_LOG_RX_LP4 //OK
-//#define DDR_SHMOO_LOG_TX_LP4 //OK
+//#define DDR_SHMOO_LOG_RX_LP4
+//#define DDR_SHMOO_LOG_TX_LP4
 
-#define CSLVL_CALVL  //Cal CA and CS both in CA Leveling //OK
+#define CSLVL_CALVL  //Cal CA and CS both in CA Leveling
 
-//#define LP4_ADD_FIX_VREF //OK
-//#define LP4_RX_VREF_OFFSET (0) //OK
+//#define LP4_ADD_FIX_VREF
+//#define LP4_RX_VREF_OFFSET (0)
 #endif
 
 #ifdef CADENCE_DDRC
@@ -328,18 +333,18 @@ extern ddr_define_struct ddr_struct_h;
 
 
 #ifdef DBG_INFO_L1
-#define DBG1(...)		tf_printf(MSG_NOTICE __VA_ARGS__)
+#define DBG1(...)		tf_printf(__VA_ARGS__)
 #else
 #define DBG1(...)
 #endif
 
 #ifdef DBG_INFO_L2
-#define ZQ_MSG(...)  	tf_printf(MSG_NOTICE "[ZQ]: " __VA_ARGS__)
-#define DLL_MSG(...)  	tf_printf(MSG_NOTICE "[DLL]: " __VA_ARGS__)
-#define RX_MSG(...)  	tf_printf(MSG_NOTICE "[RX]: " __VA_ARGS__)
-#define TX_MSG(...)  	tf_printf(MSG_NOTICE "[TX]: " __VA_ARGS__)
-#define RDG_MSG(...)  	tf_printf(MSG_NOTICE "[RDG]: " __VA_ARGS__)
-#define WR_MSG(...)  	tf_printf(MSG_NOTICE "[WR]: " __VA_ARGS__)
+#define ZQ_MSG(...)		tf_printf("[ZQ]: " __VA_ARGS__)
+#define DLL_MSG(...)	tf_printf("[DLL]: " __VA_ARGS__)
+#define RX_MSG(...)		tf_printf("[RX]: " __VA_ARGS__)
+#define TX_MSG(...)		tf_printf("[TX]: " __VA_ARGS__)
+#define RDG_MSG(...)	tf_printf("[RDG]: " __VA_ARGS__)
+#define WR_MSG(...)		tf_printf("[WR]: " __VA_ARGS__)
 #else
 #define ZQ_MSG(...)
 #define DLL_MSG(...)
@@ -350,11 +355,11 @@ extern ddr_define_struct ddr_struct_h;
 #endif
 
 #ifdef DBG_INFO_L3
-#define uartlog(...) 	tf_printf(MSG_NOTICE "U: " __VA_ARGS__)
-#define KC_MSG(...) 	tf_printf(MSG_NOTICE "[KC_DBG] " __VA_ARGS__)
-#define KC_MSG_TR(...) 	tf_printf(MSG_NOTICE "[KC_DBG_training]" __VA_ARGS__)
-#define TJ_MSG(...) 	tf_printf(MSG_NOTICE "[TJ Info] : " __VA_ARGS__)
-#define DBG_BRI(...)	tf_printf(MSG_NOTICE __VA_ARGS__)
+#define uartlog(...)	tf_printf("U: " __VA_ARGS__)
+#define KC_MSG(...)		tf_printf("[KC_DBG] " __VA_ARGS__)
+#define KC_MSG_TR(...)	tf_printf("[KC_DBG_training]" __VA_ARGS__)
+#define TJ_MSG(...)		tf_printf("[TJ Info] : " __VA_ARGS__)
+#define DBG_BRI(...)	tf_printf(__VA_ARGS__)
 #else
 #define uartlog(...)
 #define KC_MSG(...)
@@ -365,31 +370,31 @@ extern ddr_define_struct ddr_struct_h;
 
 
 #ifdef DBG_SHMOO
-#define SHMOO_MSG(...)	tf_printf(MSG_NOTICE __VA_ARGS__)
+#define SHMOO_MSG(...)	tf_printf(__VA_ARGS__)
 #else
 #define SHMOO_MSG(...)
 #endif
 
 #ifdef DBG_SHMOO_TX
-#define SHMOO_MSG_TX(...) tf_printf(MSG_NOTICE "[TX_SHMOO] : " __VA_ARGS__)
+#define SHMOO_MSG_TX(...) tf_printf("[TX_SHMOO] : " __VA_ARGS__)
 #else
 #define SHMOO_MSG_TX(...)
 #endif
 
 #ifdef DBG_SHMOO_RX
-#define SHMOO_MSG_RX(...) tf_printf(MSG_NOTICE "[RX_SHMOO] : " __VA_ARGS__)
+#define SHMOO_MSG_RX(...) tf_printf("[RX_SHMOO] : " __VA_ARGS__)
 #else
 #define SHMOO_MSG_RX(...)
 #endif
 
 #ifdef DBG_SHMOO_CA
-#define SHMOO_MSG_CA(...)	tf_printf(MSG_NOTICE "[CA_SHMOO] : " __VA_ARGS__)
+#define SHMOO_MSG_CA(...)	tf_printf("[CA_SHMOO] : " __VA_ARGS__)
 #else
 #define SHMOO_MSG_CA(...)
 #endif
 
 #ifdef DBG_SHMOO_CS
-#define SHMOO_MSG_CS(...)	tf_printf(MSG_NOTICE __VA_ARGS__)
+#define SHMOO_MSG_CS(...)	tf_printf(__VA_ARGS__)
 #else
 #define SHMOO_MSG_CS(...)
 #endif
@@ -400,9 +405,9 @@ extern uint64_t    DDR_CTRL;
 extern uint64_t    PHYD_BASE_ADDR;
 extern uint64_t    CV_DDR_PHYD_APB;
 
-uint64_t    	   DDR_BIST_BASE;
-uint64_t    		DDR_BIST_SRAM_DQ_BASE;
-uint64_t    		DDR_BIST_SRAM_DM_BASE;
+extern uint64_t		DDR_BIST_BASE;
+extern uint64_t		DDR_BIST_SRAM_DQ_BASE;
+extern uint64_t		DDR_BIST_SRAM_DM_BASE;
 
 extern uint32_t    REG_DDRPLL_MAS_STEP;
 extern uint8_t     REG_DDRPLL_MAS_ICTRL;
@@ -520,8 +525,16 @@ void cvx32_rdglvl_training_check(void);
 void cvx32_rdlvl_sw_patch(int rank);//for corner case
 void ddr_phya_multi_rank(void);
 void disable_low_power_function(void);
-void ddr_config_ctle_rsel_csel_hs(void);
+void ddr_config_ctle_rsel_csel_hs(uint8_t mode);
 void ddr4_customed_setting(void);
+void cvx32_wrlvl_req_sw(uint32_t rank);
+#ifdef SW2D_DEBUG_MODE
+void cvx32_wdqlvl_req_sw1d(uint32_t mode, uint32_t sso_period, uint32_t rank, uint32_t en_vref_sel, uint32_t vref,
+			   uint32_t dq_lvl_mode, uint32_t dm_lvl_mode, uint32_t dm_as_dbi);
+void cvx32_wdqlvl_req_sw2d(uint32_t mode, uint32_t sso_period, uint32_t rank, uint32_t vref_start, uint32_t vref_end,
+			   uint32_t vref_step, uint32_t dm_lvl_mode, uint32_t dm_as_dbi);
+#endif
+void cvx32_le_te_detect_tx(void);
 //void cvx32_bist_wr_only_infinite_prbs_init_pulse(uint32_t rank);
 #ifdef DDR_ODTEN_EXTO_24UI
 void rdodten_rxmask_backward(void);

@@ -18,9 +18,11 @@
 #include <optee_msg.h>
 #include <optee_smc.h>
 #include <cvsp.h>
+#include "delay_timer.h"
 #include "mbedtls/aes.h"
 #include "cvsp_private.h"
-#include "timer_dw.h"
+
+struct _time_records *time_records = (void *)TIME_RECORDS_ADDR;
 
 /*******************************************************************************
  * Lock to control access to the console
@@ -106,6 +108,8 @@ bmsp_args_t *bmsp_set_smc_args(uint64_t arg0, uint64_t arg1, uint64_t arg2,
  ******************************************************************************/
 uint64_t bmsp_main(void)
 {
+	time_records->bl32_start = read_time_ms();
+	VERBOSE("\n#bl32_start at %dms#\n", time_records->bl32_start);
 	INFO("%s\n", version_string);
 	INFO("%s\n", build_message);
 	NOTICE("B%lx-%lx.", (unsigned long) BL32_BASE, BL32_TOTAL_SIZE);

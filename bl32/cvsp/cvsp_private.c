@@ -3,7 +3,6 @@
 #include <cvsp.h>
 #include <debug.h>
 #include <delay_timer.h>
-#include <generic_delay_timer.h>
 #include <optee_msg.h>
 #include <optee_smc.h>
 #include <opteed_private.h>
@@ -284,7 +283,7 @@ static int cvsp_privte_smc_handler_init(void)
 		NOTICE("%s()\n", __func__);
 
 		mbedtls_init();
-		generic_delay_timer_init();
+		timer_init();
 
 		ready = 1;
 	}

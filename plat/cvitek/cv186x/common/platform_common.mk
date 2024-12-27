@@ -69,8 +69,7 @@ BL31_SOURCES		+=	lib/cpus/aarch64/aem_generic.S		\
 				plat/common/aarch64/plat_psci_common.c	\
 				plat/common/plat_gicv2.c		\
 				plat/arm/common/arm_gicv2.c		\
-				drivers/delay_timer/delay_timer.c	\
-				drivers/delay_timer/generic_delay_timer.c	\
+				drivers/delay_timer/${BOOT_CPU}/delay_timer.c	\
 				plat/cvitek/${CHIP_ARCH}/common/cv_pm.c	\
 				plat/cvitek/${CHIP_ARCH}/common/topology.c	\
 				plat/cvitek/${CHIP_ARCH}/common/aarch64/plat_helpers.S	\

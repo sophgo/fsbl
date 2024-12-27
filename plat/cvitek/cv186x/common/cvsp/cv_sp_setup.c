@@ -73,7 +73,7 @@ void bmsp_plat_arch_setup(void)
 	mmap_add_region(BL_COHERENT_RAM_BASE, BL_COHERENT_RAM_BASE, BL_COHERENT_RAM_END - BL_COHERENT_RAM_BASE,
 			MT_DEVICE | MT_RW | MT_SECURE);
 
-	VERBOSE("%s(): DEVICE 0x%lx 0x%lx\n", __func__, 0, 0x80000000);
+	VERBOSE("%s(): DEVICE 0x%x 0x%x\n", __func__, 0, 0x80000000);
 	mmap_add_region(0, 0, 0x80000000, MT_DEVICE | MT_RW | MT_SECURE);
 
 	VERBOSE("%s(): DRAM 0x%lx 0x%lx\n", __func__, DRAM_BASE, 0x800000000);
