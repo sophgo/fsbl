@@ -528,6 +528,7 @@ void disable_low_power_function(void);
 void ddr_config_ctle_rsel_csel_hs(uint8_t mode);
 void ddr4_customed_setting(void);
 void cvx32_wrlvl_req_sw(uint32_t rank);
+void calvl_pre_set(void);
 #ifdef SW2D_DEBUG_MODE
 void cvx32_wdqlvl_req_sw1d(uint32_t mode, uint32_t sso_period, uint32_t rank, uint32_t en_vref_sel, uint32_t vref,
 			   uint32_t dq_lvl_mode, uint32_t dm_lvl_mode, uint32_t dm_as_dbi);
