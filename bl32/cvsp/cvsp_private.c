@@ -32,25 +32,36 @@
 #define u64 uint64_t
 
 static uint32_t global_time0;
-
+static void hexdump(const char *label, const void *buf, size_t len) {
+    size_t i;
+    uint8_t *data = (uint8_t *)buf;
+    NOTICE("%s (%zu bytes):", label, len);
+    for (i = 0; i < len; i++) {
+        NOTICE("%x", data[i]);
+        if ((i % 16 == 15) || (i == len - 1))
+            NOTICE("\n");
+    }
+}
 bmsp_args_t *cvsp_privte_spacc_exec_handler(uint64_t func, uint64_t arg1,
 					    uint64_t arg2, uint64_t arg3,
 					    uint64_t arg4, uint64_t arg5,
 					    uint64_t arg6, uint64_t arg7)
 {
 	void *src = (void *)arg1;
-	void *dst = (void *)arg2;
+	u64 len= arg2;
+	// void *dst = (void *)arg3;
 	void *key = (void *)arg3;
 	void *iv = (void *)arg4;
-	uint64_t len = arg5;
+	uint64_t key_len = arg5;
 	uint32_t algo = (arg6 >> 48) & 0xFFFF;
 	uint32_t mode = (arg6 >> 32) & 0xFFFF;
 	uint32_t key_mode = (arg6 >> 16) & 0xFFFF;
-	uint32_t action = arg6 & 0xFFFF;
+	uint32_t  otp= (arg6>>4) & 0xF;
+	uint32_t action = arg6 & 0xF;
 	spacc_exec_config config;
 
 	inv_dcache_range((uintptr_t)src, len);
-	inv_dcache_range((uintptr_t)key, 32);
+	inv_dcache_range((uintptr_t)key, key_len);
 	inv_dcache_range((uintptr_t)iv, 32);
 
 	config.algo = algo;
@@ -59,9 +70,22 @@ bmsp_args_t *cvsp_privte_spacc_exec_handler(uint64_t func, uint64_t arg1,
 	config.key = (uintptr_t)key;
 	config.iv = (uintptr_t)iv;
 	config.action = action;
-
-	plat_cryptodma_exec((uintptr_t)src, (uintptr_t)dst, len, &config);
-
+	config.otp = otp;
+    NOTICE("Received Parameters:");
+    hexdump("Source Data", src, len); 
+	if(otp!=USE_OTP_KEY){
+		hexdump("Key Data", key, key_len); 
+	}
+	if(mode!=AES_ECB){
+		hexdump("IV Data", iv, 16);       
+	}
+    NOTICE("algo: %u", algo);
+    NOTICE("mode: %u", mode);
+    NOTICE("key mode: %u", key_mode);
+    NOTICE("action: %u", action);
+	NOTICE("otp: %u", otp);
+	plat_cryptodma_exec((uintptr_t)src, (uintptr_t)src, len, &config);
+	hexdump("result Data",src,len);
 	return bmsp_set_smc_args(TEESMC_OPTEED_RETURN_CALL_DONE, len, 0, 0, 0,
 				 0, 0, 0);
 }
@@ -243,8 +267,10 @@ bmsp_args_t *cvsp_privte_base64_handler(u64 func, u64 arg1,
 
 	inv_dcache_range((uintptr_t)src, len);
 	inv_dcache_range((uintptr_t)dst, len);
-
-	int ret = plat_cryptodma_base64((uintptr_t)src, len, (uintptr_t)dst, customer_code, action);
+	hexdump("src",src, len);
+	hexdump("dst",dst, len);
+	int ret = plat_cryptodma_base64((uintptr_t)src, len, (uintptr_t)dst,
+					customer_code, action);
 
 	return bmsp_set_smc_args(TEESMC_OPTEED_RETURN_CALL_DONE, ret, 0, 0, 0,
 				 0, 0, 0);

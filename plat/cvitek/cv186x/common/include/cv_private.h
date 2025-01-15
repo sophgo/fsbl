@@ -121,7 +121,10 @@ enum action {
 	DECRYPT = 0,
 	ENCRYPTION = 1
 };
-
+enum otp {
+	USE_DMA_KEY = 0,
+	USE_OTP_KEY = 1
+};
 typedef struct _spacc_exec_config {
 	enum algo algo;
 	enum mode mode;
@@ -129,6 +132,7 @@ typedef struct _spacc_exec_config {
 	uintptr_t key;
 	uintptr_t iv;
 	enum action action;
+	enum otp otp;
 } spacc_exec_config;
 
 int plat_cryptodma_exec(uintptr_t src, uintptr_t dst, uint64_t len, spacc_exec_config *config);
