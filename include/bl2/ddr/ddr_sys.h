@@ -106,8 +106,6 @@ enum board_ddr_type_e {
 //#define FULL_MEM_BIST
 //#define FULL_MEM_BIST_FOREVER
 
-#define WRLVL_SW_MODE
-#define SW2D_DEBUG_MODE
 //#define DDR_CLK_SSC_EN
 //#define SHOW_DDR_INIT_TIME
 
@@ -313,6 +311,9 @@ typedef struct {
 	uint64_t ddr_bist_base;
 	uint64_t ddr_bist_sram_dq_base;
 	uint64_t ddr_bist_sram_dm_base;
+
+	uint8_t wdqlvl_sw_mode_en;
+	uint8_t wrlvl_sw_mode_en;
 } ddr_define_struct;
 
 extern ddr_define_struct ddr_struct_h;
@@ -529,12 +530,10 @@ void ddr_config_ctle_rsel_csel_hs(uint8_t mode);
 void ddr4_customed_setting(void);
 void cvx32_wrlvl_req_sw(uint32_t rank);
 void calvl_pre_set(void);
-#ifdef SW2D_DEBUG_MODE
 void cvx32_wdqlvl_req_sw1d(uint32_t mode, uint32_t sso_period, uint32_t rank, uint32_t en_vref_sel, uint32_t vref,
 			   uint32_t dq_lvl_mode, uint32_t dm_lvl_mode, uint32_t dm_as_dbi);
 void cvx32_wdqlvl_req_sw2d(uint32_t mode, uint32_t sso_period, uint32_t rank, uint32_t vref_start, uint32_t vref_end,
 			   uint32_t vref_step, uint32_t dm_lvl_mode, uint32_t dm_as_dbi);
-#endif
 void cvx32_le_te_detect_tx(void);
 //void cvx32_bist_wr_only_infinite_prbs_init_pulse(uint32_t rank);
 #ifdef DDR_ODTEN_EXTO_24UI
