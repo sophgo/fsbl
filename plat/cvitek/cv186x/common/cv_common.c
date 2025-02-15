@@ -164,7 +164,7 @@ int plat_cryptodma_exec(uintptr_t src, uintptr_t dst, uint64_t len, spacc_exec_c
 	__attribute__((aligned(64))) uint32_t dma_descriptor[32] = { 0 };
 
 	uint32_t status;
-
+	u32 ts = 0;
 	INFO("AES/0x%lx/0x%lx/0x%lx\n", src, dst, len);
 	
 	// Prepare descriptor
@@ -248,6 +248,10 @@ int plat_cryptodma_exec(uintptr_t src, uintptr_t dst, uint64_t len, spacc_exec_c
 	do {
 		status = mmio_read_32(SEC_CRYPTODMA_BASE + CRYPTODMA_WR_INT);
 		INFO("INT status 0x%x\n", status);
+		if (get_timer(ts) >= 300000) {
+			ERROR("exec timeout\n");
+			return -1;
+		}
 	} while (status == 0);
 
 	

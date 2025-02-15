@@ -48,16 +48,17 @@ bmsp_args_t *cvsp_privte_spacc_exec_handler(uint64_t func, uint64_t arg1,
 					    uint64_t arg6, uint64_t arg7)
 {
 	void *src = (void *)arg1;
-	u64 len= arg2;
-	// void *dst = (void *)arg3;
-	void *key = (void *)arg3;
-	void *iv = (void *)arg4;
-	uint64_t key_len = arg5;
-	uint32_t algo = (arg6 >> 48) & 0xFFFF;
-	uint32_t mode = (arg6 >> 32) & 0xFFFF;
-	uint32_t key_mode = (arg6 >> 16) & 0xFFFF;
-	uint32_t  otp= (arg6>>4) & 0xF;
-	uint32_t action = arg6 & 0xF;
+	void *dst = (void *)arg2;
+	u64 len= arg3;
+	u64 ret;
+	void *key = (void *)arg4;
+	void *iv = (void *)arg5;
+	uint64_t key_len = arg6;
+	uint32_t algo = (arg7 >> 48) & 0xFFFF;
+	uint32_t mode = (arg7 >> 32) & 0xFFFF;
+	uint32_t key_mode = (arg7 >> 16) & 0xFFFF;
+	uint32_t  otp= (arg7>>4) & 0xF;
+	uint32_t action = arg7 & 0xF;
 	spacc_exec_config config;
 
 	inv_dcache_range((uintptr_t)src, len);
@@ -72,6 +73,7 @@ bmsp_args_t *cvsp_privte_spacc_exec_handler(uint64_t func, uint64_t arg1,
 	config.action = action;
 	config.otp = otp;
     NOTICE("Received Parameters:");
+	NOTICE("src: %p, len: %lu, key: %p, key_len: %lu, iv: %p, algo: %u, mode: %u, key_mode: %u, action: %u, otp: %u\n", src, len, key, key_len, iv, algo, mode, key_mode, action, otp);
     hexdump("Source Data", src, len); 
 	if(otp!=USE_OTP_KEY){
 		hexdump("Key Data", key, key_len); 
@@ -79,15 +81,11 @@ bmsp_args_t *cvsp_privte_spacc_exec_handler(uint64_t func, uint64_t arg1,
 	if(mode!=AES_ECB){
 		hexdump("IV Data", iv, 16);       
 	}
-    NOTICE("algo: %u", algo);
-    NOTICE("mode: %u", mode);
-    NOTICE("key mode: %u", key_mode);
-    NOTICE("action: %u", action);
-	NOTICE("otp: %u", otp);
-	plat_cryptodma_exec((uintptr_t)src, (uintptr_t)src, len, &config);
+    
+	ret=plat_cryptodma_exec((uintptr_t)src, (uintptr_t)dst, len, &config);
 	hexdump("result Data",src,len);
 	return bmsp_set_smc_args(TEESMC_OPTEED_RETURN_CALL_DONE, len, 0, 0, 0,
-				 0, 0, 0);
+				 0, 0, ret);
 }
 
 bmsp_args_t *cvsp_privte_efuse_read_handler(uint64_t func, uint64_t arg1,
