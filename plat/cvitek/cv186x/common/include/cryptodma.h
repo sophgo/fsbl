@@ -35,20 +35,26 @@
 #define CRYPTODMA_KEY				0x0A
 #define CRYPTODMA_IV				0x12
 
-#define DES_USE_BYPASS				BIT(8)
-#define DES_USE_AES					BIT(9)
-#define DES_USE_DES					BIT(10)
-#define DES_USE_SM4					BIT(11)
-#define DES_USE_SHA					BIT(12)
-#define DES_USE_BASE64				BIT(13)
-#define DES_USE_KEY0				BIT(16)
-#define DES_USE_KEY1				BIT(17)
-#define DES_USE_KEY2				BIT(18)
+#define DES_USE_BYPASS              BIT(8)
+#define DES_USE_AES                 BIT(9)
+#define DES_USE_DES                 BIT(10)
+#define DES_USE_SM4                 BIT(11)
+#define DES_USE_SHA                 BIT(12)
+#define DES_USE_BASE64              BIT(13)
+#define DES_USE_SM3				    BIT(14)
+#define DES_USE_KEY0                BIT(16)
+#define DES_USE_KEY1                BIT(17)
+#define DES_USE_KEY2                BIT(18)
 #define DES_USE_DESCRIPTOR_KEY		BIT(19)
-#define DES_USE_IV0					BIT(20)
-#define DES_USE_IV1					BIT(21)
-#define DES_USE_IV2					BIT(22)
-#define DES_USE_DESCRIPTOR_IV		BIT(23)
+#define DES_USE_IV0                 BIT(20)
+#define DES_USE_IV1                 BIT(21)
+#define DES_USE_IV2                 BIT(22)
+#define DES_USE_DESCRIPTOR_IV       BIT(23)
+#define IV_OUT0_SELECT              BIT(24)
+#define IV_OUT1_SELECT              BIT(25)
+#define IV_OUT2_SELECT              BIT(26)
+#define OTP_KEY_SEL                 BIT(27)
+
 
 // Cipher control for AES
 #define DECRYPT_ENABLE					0x0

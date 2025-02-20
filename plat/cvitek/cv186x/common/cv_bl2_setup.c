@@ -358,6 +358,31 @@ void enable_top_wdt(void)
 	mmio_write_32(PERI_WDT0_BASE, 0xD1);
 }
 
+void vddc_pwm_init(void)
+{
+	/*
+	 * low_period = 0x55; // 0.98V
+	 * low_period = 0x50; // 0.96V
+	 * low_period = 0x4B; // 0.94V
+	 * low_period = 0x46; // 0.92V
+         * low_period = 0x42; // 0.90V
+	 * low_period = 0x41; // 0.89V
+	 * low_period = 0x3c; // 0.87V
+         */
+	int low_period = 0x42;
+
+        // set pin/func mux GPIO0 to PWM8
+        mmio_clrsetbits_32(G12_PINMUX_BASE + 0x64, 0xF << 4, 0x7 << 4);
+        mmio_clrsetbits_32(CORE_IPMUX_BASE + 0xc4, 0xF, 0xC);
+
+        // init PWM8 with 34% duty cycle
+        mmio_clrsetbits_32(PWM2_BASE + HLPERIOD0, 0x3FFFFFFF, low_period);
+        mmio_clrsetbits_32(PWM2_BASE + PERIOD0, 0x3FFFFFFF, 0x64);
+        mmio_clrsetbits_32(PWM2_BASE + POLARITY, 0xF << 8, 0);
+        mmio_clrsetbits_32(PWM2_BASE + PWMSTART, 0xF, 0x1);
+        mmio_clrsetbits_32(PWM2_BASE + PWM_OE, 0xF, 0x1);
+}
+
 void platform_setup(void)
 {
 	time_records->bl2_start = read_time_ms();
@@ -370,6 +395,8 @@ void platform_setup(void)
 
 	console_init(PLAT_BOOT_UART_BASE, PLAT_BM_BOOT_UART_CLK_IN_HZ,
 		     PLAT_BM_CONSOLE_BAUDRATE);
+
+	vddc_pwm_init();
 
 	config_rgmii_power();
 	NOTICE("\nFSBL %s:%s\n", version_string, build_message);

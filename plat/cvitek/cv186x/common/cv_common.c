@@ -161,6 +161,101 @@ int plat_cryptodma_des(uintptr_t src, uintptr_t des, uint64_t len, unsigned char
 
 int plat_cryptodma_exec(uintptr_t src, uintptr_t dst, uint64_t len, spacc_exec_config *config)
 {
+	__attribute__((aligned(64))) uint32_t dma_descriptor[32] = { 0 };
+
+	uint32_t status;
+	u32 ts = 0;
+	INFO("AES/0x%lx/0x%lx/0x%lx\n", src, dst, len);
+	
+	// Prepare descriptor
+	dma_descriptor[CRYPTODMA_CTRL] =  DES_USE_DESCRIPTOR_IV | DES_USE_AES | 0xF|IV_OUT0_SELECT;
+	if(config->otp==USE_OTP_KEY){
+		dma_descriptor[CRYPTODMA_CTRL] |= OTP_KEY_SEL;
+	}else{
+		dma_descriptor[CRYPTODMA_CTRL] |= DES_USE_DESCRIPTOR_KEY;
+		switch(config->key_mode){
+			case AES_128BIT:
+				memcpy(&dma_descriptor[CRYPTODMA_KEY],(void*)config->key, 16);
+				break;
+			case AES_192BIT:
+				memcpy(&dma_descriptor[CRYPTODMA_KEY],(void*)config->key, 24);
+				break;
+			case AES_256BIT:
+				memcpy(&dma_descriptor[CRYPTODMA_KEY],(void*)config->key, 32);
+				break;
+			default:
+				break;
+		}
+	}
+	dma_descriptor[CRYPTODMA_CIPHER]|=config->key_mode<<3;
+	NOTICE("CONFIG->KEY_MODE:%d\n",config->key_mode);
+	NOTICE("CONFIG->MODE:%d\n",config->mode);
+	switch(config->mode){
+		case AES_ECB:
+			break;
+		case AES_CBC:
+			dma_descriptor[CRYPTODMA_CIPHER] |= CBC_ENABLE << 1;
+			break;
+		case AES_CTR:
+			dma_descriptor[CRYPTODMA_CIPHER] |= 0x1 << 2;
+			break;
+		default:
+			break;
+	}
+	memcpy(&dma_descriptor[CRYPTODMA_IV], (const void *)config->iv, 16);
+	if (config->action == ENCRYPTION) {
+		dma_descriptor[CRYPTODMA_CIPHER] |= 1;
+	} 
+
+	dma_descriptor[CRYPTODMA_SRC_ADDR_L] = (uint32_t)(src & 0xFFFFFFFF);
+	dma_descriptor[CRYPTODMA_SRC_ADDR_H] = (uint32_t)(src >> 32);
+
+	dma_descriptor[CRYPTODMA_DST_ADDR_L] = (uint32_t)(dst & 0xFFFFFFFF);
+	dma_descriptor[CRYPTODMA_DST_ADDR_H] = (uint32_t)(dst >> 32);
+
+	dma_descriptor[CRYPTODMA_DATA_AMOUNT_L] = (uint32_t)(len & 0xFFFFFFFF);
+	dma_descriptor[CRYPTODMA_DATA_AMOUNT_H] = (uint32_t)(len >> 32);
+
+	// Set cryptodma control
+	mmio_write_32(SEC_CRYPTODMA_BASE + CRYPTODMA_INT_MASK, 0x3);
+	mmio_write_32(SEC_CRYPTODMA_BASE + CRYPTODMA_DES_BASE_L,
+		      (uint32_t)((uint64_t)dma_descriptor & 0xFFFFFFFF));
+	mmio_write_32(SEC_CRYPTODMA_BASE + CRYPTODMA_DES_BASE_H,
+		      (uint32_t)((uint64_t)dma_descriptor >> 32));
+
+	status = mmio_read_32(SEC_CRYPTODMA_BASE + CRYPTODMA_DMA_CTRL);
+
+	flush_dcache_range((unsigned long)dma_descriptor,
+			   sizeof(dma_descriptor));
+	flush_dcache_range((uintptr_t)src, len);
+	flush_dcache_range((uintptr_t)dst, len);
+	// Clear interrupt
+	mmio_write_32(SEC_CRYPTODMA_BASE + CRYPTODMA_WR_INT, 0x3);
+	// Trigger cryptodma engine
+	mmio_write_32(SEC_CRYPTODMA_BASE + CRYPTODMA_DMA_CTRL,
+		      DMA_WRITE_MAX_BURST << 24 | DMA_READ_MAX_BURST << 16 |
+			      DMA_DESCRIPTOR_MODE << 1 | DMA_ENABLE);
+	NOTICE("dma_descriptor[CRYPTODMA_CTRL]:%x\n",
+	       dma_descriptor[CRYPTODMA_CTRL]);
+	NOTICE("dma_descriptor[CRYPTODMA_CIPHER]:%x\n",
+	       dma_descriptor[CRYPTODMA_CIPHER]);
+	NOTICE("SEC_CRYPTODMA_BASE[%x]:%x\n", SEC_CRYPTODMA_BASE + 0x14,
+	       mmio_read_32(SEC_CRYPTODMA_BASE + 0x14));
+	NOTICE("SEC_CRYPTODMA_BASE[CTRL]%x:%x\n",
+	       SEC_CRYPTODMA_BASE + CRYPTODMA_DMA_CTRL,
+	       mmio_read_32(SEC_CRYPTODMA_BASE + CRYPTODMA_DMA_CTRL));
+
+	do {
+		status = mmio_read_32(SEC_CRYPTODMA_BASE + CRYPTODMA_WR_INT);
+		INFO("INT status 0x%x\n", status);
+		if (get_timer(ts) >= 300000) {
+			ERROR("exec timeout\n");
+			return -1;
+		}
+	} while (status == 0);
+
+	
+
 	return 0;
 }
 

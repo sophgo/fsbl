@@ -289,6 +289,17 @@ extern struct _time_records *time_records;
 #define PLL_G2_BASE (TOP_BASE + 0x00002800)
 #define PWM0_BASE (TOP_BASE + 0x60000)
 
+#define G12_PINMUX_BASE	(TOP_BASE + 0x00004c00)
+
+#define CORE_IPMUX_BASE	(TOP_BASE + 0x00005000)
+
+#define PWM2_BASE	0x27052000
+#define HLPERIOD0	0x000
+#define PERIOD0		0x004
+#define POLARITY	0x040
+#define PWMSTART	0x044
+#define PWM_OE		0x0D0
+
 #define APSYS_BASE		0x36000000
 #define GIC_BASE		(APSYS_BASE  + 0x1A000000)
 
