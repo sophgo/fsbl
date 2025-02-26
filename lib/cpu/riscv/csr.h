@@ -829,6 +829,10 @@
 #define CSR_DCSR 0x7b0
 #define CSR_DPC 0x7b1
 #define CSR_DSCRATCH 0x7b2
+/* T-Head vendor CSRs, not known by upstream binutils */
+#define CSR_MXSTATUS 0x7c0
+#define CSR_MHCR 0x7c1
+#define CSR_MCOR 0x7c2
 #define CSR_MCYCLE 0xb00
 #define CSR_MINSTRET 0xb02
 #define CSR_MHPMCOUNTER3 0xb03
