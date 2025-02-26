@@ -4,16 +4,16 @@ ASFLAGS +=\
 	$(CPPFLAGS) \
 	-DRISCV \
 	-D__ASSEMBLY__ \
-	-march=rv64imafdcvxthead -mstrict-align \
+	-march=rv64imafdc -mstrict-align \
 	-mcmodel=medany \
 	-mabi=lp64d \
-	-ffreestanding  \
+	-ffreestanding \
 	-Wa,--fatal-warnings
 
 TF_CFLAGS += \
 	$(CPPFLAGS) \
 	-DRISCV \
-	-march=rv64imafdcvxthead \
+	-march=rv64imafdc \
 	-mcmodel=medany \
 	-mabi=lp64d \
 	-ffreestanding -fno-builtin -Wall -std=gnu99 \
@@ -21,9 +21,14 @@ TF_CFLAGS += \
 	-fno-delete-null-pointer-checks
 
 TF_LDFLAGS += \
-	--fatal-warnings -Os \
+	--fatal-warnings \
 	--gc-sections \
 	${TF_LDFLAGS_aarch64}
+
+# The FSBL linker scripts produce RWX LOAD segments on purpose; binutils >= 2.39
+# warns about them, which would fail the link with --fatal-warnings.
+TF_LDFLAGS += $(shell $(LD) --help 2>/dev/null | grep -q -- --no-warn-rwx-segments && \
+	echo --no-warn-rwx-segments)
 
 CPU_INCLUDES := \
 	-Iinclude/cpu/${BOOT_CPU} \
