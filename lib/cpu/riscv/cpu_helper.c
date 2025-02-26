@@ -11,11 +11,11 @@
 void sync_cache(void)
 {
 	asm volatile(
-			"icache.iall\n"
-			"sync.i\n"
-			:
-			:
-			: "memory");
+		".long 0x0100000b\n" /* th.icache.iall */
+		".long 0x01a0000b\n" /* th.sync.i */
+		:
+		:
+		: "memory");
 }
 
 void cpu_report_exception(unsigned int exception_type)
