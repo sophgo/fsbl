@@ -384,6 +384,50 @@ static void bm_emmc_hw_init(void)
 	INFO("eMMC init done\n");
 }
 
+#ifdef CONFIG_ENABLE_EMMC_HW_RESET_QFN
+
+#define GPIO_SWPORTA_DDR 0x004
+#define GPIO_SWPORTA_DR 0x000
+#define GPIO0_BASE 0x03020000
+#define GPIO_NUM 19
+
+static void bm_emmc_dev_reset(void)
+{
+	INFO("emmc hw reset: qfn\n");
+
+	/* Set pinmux for emmc reset */
+	mmio_write_8(PINMUX_BASE + 0x64, 0x3);//0x03001064
+	INFO("qfn rst: pinmux:%x\n", mmio_read_8(PINMUX_BASE + 0x64));
+
+	uint32_t base = GPIO0_BASE;
+	uint32_t dir_reg_base = base + GPIO_SWPORTA_DDR;
+	uint32_t val_reg_base = base + GPIO_SWPORTA_DR;
+
+	uint32_t dir_reg = mmio_read_32(dir_reg_base);
+	uint32_t val_reg = mmio_read_32(val_reg_base);
+
+	/* Set direction to output */
+	dir_reg &=  ~(1 << GPIO_NUM);
+	dir_reg |= (1 << GPIO_NUM);
+	mmio_write_32(dir_reg_base, dir_reg);
+	udelay(100);
+	INFO("qfn rst 0: dir:%x, val:%x\n", mmio_read_32(dir_reg_base), mmio_read_32(val_reg_base));
+
+	/* Set Value to 0, reset */
+	val_reg	&=  ~(1 << GPIO_NUM);
+	mmio_write_32(val_reg_base, val_reg);
+	udelay(500);
+	INFO("qfn rst 1: dir:%x, val:%x\n", mmio_read_32(dir_reg_base), mmio_read_32(val_reg_base));
+
+	/* Set value to 1 */
+	val_reg	&=  ~(1 << GPIO_NUM);
+	val_reg |= (1 << GPIO_NUM);
+	mmio_write_32(val_reg_base, val_reg);
+	udelay(500);
+	INFO("qfn rst 2: dir:%x, val:%x\n", mmio_read_32(dir_reg_base), mmio_read_32(val_reg_base));
+
+}
+#else
 static void bm_emmc_dev_reset(void)
 {
 	uintptr_t base, vendor_base;
@@ -399,6 +443,7 @@ static void bm_emmc_dev_reset(void)
 	INFO("eMMC RST_n2 n 0x%x\n", mmio_read_16(vendor_base + VENDOR_EMMC_CTRL));
 	mdelay(1);
 }
+#endif
 
 static int bm_emmc_set_ios(int clk, int width, int is_hs_mode)
 {

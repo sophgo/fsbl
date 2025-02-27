@@ -36,7 +36,6 @@ int bl2_decompress(void *dst, size_t *dst_size, const void *src,
 int load_kernel(int retry);
 void print_sram_log(void);
 int load_param2(int retry);
-int load_ddr_param(int retry);
 int load_ddr(void);
 int load_data_from_storage(void *buffer, uint32_t offset, uint32_t size,
 			   int retry);
@@ -408,83 +407,6 @@ int load_rest_doublesdk(void)
 
 	// Init sys PLL and switch clocks to PLL
 	sys_pll_init();
-
-retry_from_flash:
-	// Small hart boot failure does not affect large hart boot
-	for (retry = 0; retry < p_rom_api_get_number_of_retries(); retry++) {
-		if (!boot_flag_A) {
-			if (p_rom_api_get_boot_src() != BOOT_SRC_USB) {
-				if (load_user_param_and_logo(retry) < 0)
-					continue;
-
-				if (load_blcp_2nd_doublesdk(retry) < 0)
-					continue;
-			}
-			break;
-		} else {
-			if (load_blcp_2nd_doublesdk(retry) < 0)
-				continue;
-			break;
-		}
-	}
-	for (retry = 0; retry < p_rom_api_get_number_of_retries(); retry++) {
-		if (!boot_flag_A) {
-			if (load_monitor_doublesdk(retry, &monitor_entry) < 0)
-				continue;
-
-			if (load_kernel(retry) == 1) {
-				if (load_loader_2nd_doublesdk(
-					    retry, &loader_2nd_entry) < 0)
-					continue;
-			}
-		} else {
-			if (load_monitor_doublesdk(retry, &monitor_entry) < 0)
-				continue;
-			if (load_loader_2nd_doublesdk(retry,
-						      &loader_2nd_entry) < 0)
-				continue;
-		}
-		break;
-	}
-
-	if (retry >= p_rom_api_get_number_of_retries()) {
-		switch (p_rom_api_get_boot_src()) {
-		case BOOT_SRC_UART:
-		case BOOT_SRC_SD:
-		case BOOT_SRC_USB:
-			WARN("DL cancelled. Load flash. (%d).\n", retry);
-			// Continue to boot from flash if boot from external source
-			p_rom_api_flash_init();
-			goto retry_from_flash;
-		default:
-			ERROR("Failed to load rest (%d).\n", retry);
-			panic_handler();
-		}
-	}
-
-	sync_cache();
-	console_flush();
-
-	switch_rtc_mode_2nd_stage();
-
-	if (monitor_entry) {
-		NOTICE("Jump to monitor at 0x%lx.\n", monitor_entry);
-		jump_to_monitor(monitor_entry, loader_2nd_entry);
-	} else {
-		NOTICE("Jump to loader_2nd at 0x%lx.\n", loader_2nd_entry);
-		jump_to_loader_2nd(loader_2nd_entry);
-	}
-
-	return 0;
-}
-int load_rest_od_sel_doublesdk(void)
-{
-	int retry = 0;
-	uint64_t monitor_entry = 0;
-	uint64_t loader_2nd_entry = 0;
-
-	// Init sys PLL and switch clocks to PLL
-	sys_pll_init_od_sel();
 #ifdef IMPROVE_AXI_CLK
 	// set hsperi clock to PLL (FPLL) div by 3  = 500MHz
 	mmio_write_32(0x030020B8, 0x00030009); //--> CLK_AXI4
@@ -508,11 +430,11 @@ retry_from_flash:
 			break;
 		}
 	}
-
 	for (retry = 0; retry < p_rom_api_get_number_of_retries(); retry++) {
 		if (!boot_flag_A) {
 			if (load_monitor_doublesdk(retry, &monitor_entry) < 0)
 				continue;
+
 			if (load_kernel(retry) == 1) {
 				if (load_loader_2nd_doublesdk(
 					    retry, &loader_2nd_entry) < 0)
@@ -542,6 +464,7 @@ retry_from_flash:
 			panic_handler();
 		}
 	}
+
 #ifdef IMPROVE_AXI_CLK
 	// set hsperi clock to PLL (FPLL) div by 5  = 300MHz
 	mmio_write_32(0x030020B8, 0x00050009); //--> CLK_AXI4

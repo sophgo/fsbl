@@ -11,6 +11,7 @@
 #include <usb/cv_usb.h>
 
 struct _macros_misc macros_misc;
+enum CHIP_CLK_MODE chip_clk_mode = CLK_ND;
 #ifdef DOUBLESDK
 char boot_flag_A;
 #endif
@@ -217,20 +218,20 @@ void bl2_main(void)
 	}
 #endif
 
+#ifdef OD_CLK_SEL
+	chip_clk_mode = CLK_OD;
+#else
+#ifdef VC_CLK_OVERDRIVE
+	chip_clk_mode = CLK_VC_OD;
+#endif
+#endif
 	load_ddr();
 	init_param_memory();
-#ifdef OD_CLK_SEL
-	#ifdef DOUBLESDK
-		load_rest_od_sel_doublesdk();
-	#else
-		load_rest_od_sel();
-	#endif
+
+#ifdef DOUBLESDK
+	load_rest_doublesdk();
 #else
-	#ifdef DOUBLESDK
-		load_rest_doublesdk();
-	#else
-		load_rest();
-	#endif
+	load_rest();
 #endif
 
 	NOTICE("BL2 end.\n");

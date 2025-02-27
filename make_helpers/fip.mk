@@ -32,7 +32,9 @@ else
 fip%: export NOR_INFO=$(shell printf '%72s' | tr ' ' 'FF')
 endif
 fip%: export DDR_PARAM_TEST_PATH = test/cv181x/ddr_param.bin
-
+ifeq (${CONFIG_ENABLE_EMMC_HW_RESET_QFN},y)
+$(eval $(call add_define,CONFIG_ENABLE_EMMC_HW_RESET_QFN))
+endif
 
 ${BUILD_PLAT}:
 	@mkdir -p '${BUILD_PLAT}'
@@ -93,7 +95,6 @@ fip-all: fip-dep
 		--BLCP_IMG_RUNADDR=${BLCP_IMG_RUNADDR} \
 		--BLCP_PARAM_LOADADDR=${BLCP_PARAM_LOADADDR} \
 		--BLCP=${BLCP_PATH} \
-		--DDR_PARAM='${DDR_PARAM_TEST_PATH}' \
 		--BLCP_2ND='${BLCP_2ND_PATH}' \
 		--MONITOR='${MONITOR_PATH}' \
 		--BL32='${BL32_PATH}' \
@@ -120,7 +121,6 @@ fip-all: fip-dep
 		--BLCP_IMG_RUNADDR=${BLCP_IMG_RUNADDR} \
 		--BLCP_PARAM_LOADADDR=${BLCP_PARAM_LOADADDR} \
 		--BLCP=${BLCP_PATH} \
-		--DDR_PARAM='${DDR_PARAM_TEST_PATH}' \
 		--BLCP_2ND='${BLCP_2ND_PATH}' \
 		--MONITOR='${MONITOR_PATH}' \
 		--LOADER_2ND='${LOADER_2ND_PATH}' \

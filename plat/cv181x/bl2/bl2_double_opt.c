@@ -481,11 +481,6 @@ retry_from_flash:
 	for (retry = 0; retry < p_rom_api_get_number_of_retries(); retry++) {
 		if (load_param2(retry) < 0)
 			continue;
-#if 0
-		if (load_ddr_param(retry) < 0)
-			continue;
-#endif
-
 		break;
 	}
 
