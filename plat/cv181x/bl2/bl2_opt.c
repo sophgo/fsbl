@@ -696,7 +696,7 @@ retry_from_flash:
 
 	// Small hart boot failure does not affect large hart boot
 	for (retry = 0; retry < p_rom_api_get_number_of_retries(); retry++) {
-		if (cur_boot_src != BOOT_SRC_USB) {
+		if (cur_boot_src != BOOT_SRC_USB && cur_boot_src != BOOT_SRC_UART) {
 			if (load_user_param_and_logo(retry) < 0)
 				continue;
 
