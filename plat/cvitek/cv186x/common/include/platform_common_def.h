@@ -401,10 +401,10 @@ extern struct _time_records *time_records;
 #define RTC_ST_ON_REASON 0xF8
 #define RTC_ST_OFF_REASON 0xFC
 
-#define RTC_INFO0 (REG_RTC_BASE + 0x1C)
-#define RTC_INFO1 (REG_RTC_BASE + 0x20)
-#define RTC_INFO2 (REG_RTC_BASE + 0x24)
-#define RTC_INFO3 (REG_RTC_BASE + 0x28)
+#define RTC_INFO0  0x1C
+#define RTC_INFO1  0x20
+#define RTC_INFO2  0x24
+#define RTC_INFO3  0x28
 
 #define REG_RTC_ST_ON_REASON (REG_RTC_BASE + RTC_ST_ON_REASON)
 
@@ -444,6 +444,7 @@ extern struct _time_records *time_records;
 #define PLAT_BM_SRAM_FLAG_SIZE		4
 #define MAGIC_NUM_USB_DL		0x4D474E31 // MGN1
 #define MAGIC_NUM_SD_DL			0x4D474E32 // MGN2
+#define MAGIC_NUM_UART_DL 		0x4D474E33 // MGN3
 #define CVI_SAPD_FLAG 0x53415044
 
 #define PLAT_BM_TRUSTED_MAILBOX_BASE	(PLAT_BM_SRAM_FLAG + PLAT_BM_SRAM_FLAG_SIZE)
