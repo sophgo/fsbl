@@ -53,6 +53,8 @@ void bl2_main(void)
 
 	if (v == BOOT_SRC_UART) {
 		console_init(0, PLAT_UART_CLK_IN_HZ, UART_DL_BAUDRATE);
+	} else {
+		console_init(0, PLAT_UART_CLK_IN_HZ, PLAT_CONSOLE_BAUDRATE);
 	}
 
 	ATF_STATE = ATF_STATE_BL2_MAIN;
