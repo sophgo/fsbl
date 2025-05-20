@@ -5268,7 +5268,7 @@ extern uint32_t ddr_data_rate;
 #define  LP4_4266_x16_DDR_PHY_REG_65_F0_DATA        0b00000000000000000000000000110110
 										// f0_param_phya_reg_tx_byte0_cfg_rzq_nmos_unit:[2:0]=0b101  
 										// f0_param_phya_reg_tx_byte0_cfg_rzq_pmos_unit:[5:3]=0b101
-#define  LP4_4266_x16_DDR_PHY_REG_1_F0_DATA         0b00000000000000000000101101101101
+#define  LP4_4266_x16_DDR_PHY_REG_1_F0_DATA         0b00000000000000000000110110110110
 										// f0_param_phya_reg_tx_ca_clk0_cfg_rzq_nmos_unit:[2:0]=0b101  
 										// f0_param_phya_reg_tx_ca_clk0_cfg_rzq_pmos_unit:[5:3]=0b101
 										// f0_param_phya_reg_tx_ca_clk1_cfg_rzq_nmos_unit:[8:6]=0b101  

@@ -106,7 +106,9 @@ enum board_ddr_type_e {
 //#define FULL_MEM_BIST
 //#define FULL_MEM_BIST_FOREVER
 
-//#define DDR_CLK_SSC_EN
+#define DDR_CLK_SSC_EN
+#define DDR_CLK_SSC_MODULATION 33 //kHz
+#define DDR_CLK_SSC_DEVIATION 0.25 //%0.25
 //#define SHOW_DDR_INIT_TIME
 
 //#define DBG_INFO_L1
