@@ -695,6 +695,23 @@ void fip_src_check(void)
 	}
 }
 
+/**
+ * @brief Built-In Self-Repair RESET
+ *
+ */
+void reset_rtc_bisr(void)
+{
+	// NOTICE("%s\n", __func__);
+	// All the RAM on the chip is bisr in the rom code, which is reset here
+	// bisr_pdgroup_en0 1 2 3 reset 0
+	mmio_write_32(0x050250dc, 0x0);
+	mmio_write_32(0x050250e0, 0x0);
+	mmio_write_32(0x050250e4, 0x0);
+	mmio_write_32(0x050250e8, 0x0);
+	// bisr_repair_en reset 0
+	mmio_write_32(0x050250d8, 0x0);
+}
+
 int load_rest(void)
 {
 	int retry = 0;
@@ -731,6 +748,8 @@ retry_from_flash:
 		if (load_loader_2nd(retry, &loader_2nd_entry) < 0)
 			continue;
 
+		// reset rtc bisr which occurs in rom
+		reset_rtc_bisr();
 		//MCU reset shoule deassert after image loaded from nor flash
 		mmio_write_32(0x05025018, 0x1fffff);
 		break;
