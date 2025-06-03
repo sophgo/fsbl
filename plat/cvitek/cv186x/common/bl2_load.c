@@ -20,6 +20,8 @@
 #define ADC_CYC_SET 0xc
 #define ADC_RESULT3 0x1c
 
+#define SOC_RC (0x1 << 5)
+
 uint32_t adc_val_ddr_array[7];
 uint32_t adc_val_ddr_array_sum = 0;
 uint32_t adc_val_ddr_array_min = 4096;
@@ -671,6 +673,9 @@ void fip_src_check(void)
 	if (p_rom_api->get_boot_src() != BOOT_SRC_RTC_NOR)
 		return;
 
+	if (mmio_read_32(PCIE_BOOT_REG) & SOC_RC)
+		return;
+
 	mmio_setbits_32(PCIE_BOOT_REG, 0x3 << 16);
 	NOTICE("Waiting for boot image in position\n");
 	while (1) {
@@ -695,6 +700,23 @@ void fip_src_check(void)
 	}
 }
 
+/**
+ * @brief Built-In Self-Repair RESET
+ *
+ */
+void reset_rtc_bisr(void)
+{
+	// NOTICE("%s\n", __func__);
+	// All the RAM on the chip is bisr in the rom code, which is reset here
+	// bisr_pdgroup_en0 1 2 3 reset 0
+	mmio_write_32(0x050250dc, 0x0);
+	mmio_write_32(0x050250e0, 0x0);
+	mmio_write_32(0x050250e4, 0x0);
+	mmio_write_32(0x050250e8, 0x0);
+	// bisr_repair_en reset 0
+	mmio_write_32(0x050250d8, 0x0);
+}
+
 int load_rest(void)
 {
 	int retry = 0;
@@ -711,7 +733,8 @@ retry_from_flash:
 	for (retry = 0; retry < p_rom_api->get_number_of_retries(); retry++) {
 		mmio_write_32(0x05025018, 0x1ffffd);
 #ifdef	BOOT_FROM_EMMC
-		if (p_rom_api->get_boot_src() != BOOT_SRC_PCIE)
+		if ((p_rom_api->get_boot_src() != BOOT_SRC_PCIE) &&
+				!(mmio_read_32(PCIE_BOOT_REG) & SOC_RC))
 			if (load_oem_info() < 0)
 				ERROR("Fail to load OEM info.\n");
 #endif
@@ -731,6 +754,8 @@ retry_from_flash:
 		if (load_loader_2nd(retry, &loader_2nd_entry) < 0)
 			continue;
 
+		// reset rtc bisr which occurs in rom
+		reset_rtc_bisr();
 		//MCU reset shoule deassert after image loaded from nor flash
 		mmio_write_32(0x05025018, 0x1fffff);
 		break;
