@@ -289,10 +289,17 @@ int load_blcp_2nd(int retry)
 	rtos_base = mmio_read_32(AXI_SRAM_RTOS_BASE);
 	init_comm_info();
 
-	if (rtos_base == CVI_RTOS_MAGIC_CODE) {
-		mmio_write_32(AXI_SRAM_RTOS_BASE, fip_param2.blcp_2nd_runaddr);
-	} else {
-		reset_c906l(fip_param2.blcp_2nd_runaddr);
+	switch (p_rom_api->get_boot_src()) {
+		case BOOT_SRC_UART:
+		// case BOOT_SRC_SD:
+		// case BOOT_SRC_USB:
+			break;
+		default:
+			if (rtos_base == CVI_RTOS_MAGIC_CODE) {
+				mmio_write_32(AXI_SRAM_RTOS_BASE, fip_param2.blcp_2nd_runaddr);
+			} else {
+				reset_c906l(fip_param2.blcp_2nd_runaddr);
+			}
 	}
 
 	NOTICE("C2E.\n");
@@ -573,14 +580,16 @@ int load_loader_2nd(int retry, uint64_t *loader_2nd_entry)
 	return 0;
 }
 
-#ifdef	BOOT_FROM_EMMC
+#if defined(BOOT_FROM_EMMC) || (defined(BOOT_FROM_SPINOR) && defined(KERNEL_BOOT_FROM_NVME))
 #define OEM_INFO_MAX_BYTE_SIZE	256
 int load_oem_info(void)
 {
-	static int is_emmc_init = 0;
-	int ret;
 	char oem_info[EMMC_BLOCK_SIZE] __attribute__((aligned(EMMC_BLOCK_SIZE)));
 	uint8_t dram_size_GB = 0;
+
+#if defined(BOOT_FROM_EMMC)
+	static int is_emmc_init;
+	int ret;
 
 	if (is_emmc_init == 0) {
 		bm_emmc_init();
@@ -605,6 +614,19 @@ int load_oem_info(void)
 		if (ret < 0)
 			return -1;
 	}
+#elif defined(BOOT_FROM_SPINOR)
+	//todo: read OEM info from spinor flash
+
+	memset(oem_info, 0, EMMC_BLOCK_SIZE);
+
+	/* Write ddr size into OEM */
+	dram_size_GB = (uint8_t)((usys0_cap_in_mbyte + usys1_cap_in_mbyte) / 1024);
+	if (dram_size_GB != ((uint8_t)oem_info[0xf0])) {
+		oem_info[0xf0] = (dram_size_GB & 0xFF);
+		NOTICE("Rewrite ddr size into OEM, ddr_size = %d GB\n", oem_info[0xf0]);
+		// todo: Rewrite to spinor flash
+	}
+#endif
 
 	/* Write OEM information to the last OEM_INFO_MAX_BYTE_SIZE bytes of RTC SRAM */
 	for (int i = 0; i < OEM_INFO_MAX_BYTE_SIZE; i ++)
@@ -727,7 +749,7 @@ int load_rest(void)
 retry_from_flash:
 	for (retry = 0; retry < p_rom_api->get_number_of_retries(); retry++) {
 		mmio_write_32(0x05025018, 0x1ffffd);
-#ifdef	BOOT_FROM_EMMC
+#if defined(BOOT_FROM_EMMC) || (defined(BOOT_FROM_SPINOR) && defined(KERNEL_BOOT_FROM_NVME))
 		if (p_rom_api->get_boot_src() != BOOT_SRC_PCIE)
 			if (load_oem_info() < 0)
 				ERROR("Fail to load OEM info.\n");

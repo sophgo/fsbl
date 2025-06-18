@@ -109,6 +109,9 @@ void setup_dl_flag(void)
 	case BOOT_SRC_USB:
 		mmio_write_32(BOOT_SOURCE_FLAG_ADDR, MAGIC_NUM_USB_DL);
 		break;
+	case BOOT_SRC_UART:
+		mmio_write_32(BOOT_SOURCE_FLAG_ADDR, MAGIC_NUM_UART_DL);
+		break;
 	default:
 		mmio_write_32(BOOT_SOURCE_FLAG_ADDR, v);
 		break;
@@ -418,7 +421,8 @@ void platform_setup(void)
 	set_rtc_en_registers();
 	bm_storage_boot_loader_version(BL2_VERSION_BASE);
 
-	enable_top_wdt();
+	if (BOOT_SRC_UART != p_rom_api->get_boot_src())
+		enable_top_wdt();
 }
 
 #pragma GCC diagnostic pop

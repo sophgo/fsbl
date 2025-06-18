@@ -303,6 +303,12 @@ endif
 
 ifeq (${STORAGE_TYPE},emmc)
 $(eval $(call add_define,BOOT_FROM_EMMC))
+else ifeq (${STORAGE_TYPE},spinor)
+$(eval $(call add_define,BOOT_FROM_SPINOR))
+endif
+
+ifeq (${KERNEL_BOOT_TYPE},nvme)
+$(eval $(call add_define,KERNEL_BOOT_FROM_NVME))
 endif
 
 ################################################################################

@@ -395,29 +395,12 @@ __dead2 void bm_pwr_domain_pwr_down_wfi(const psci_power_state_t *target_state)
  ******************************************************************************/
 static void __dead2 bm_system_off(void)
 {
-	if (mmio_read_32(REG_RTC_BASE + RTC_INFO0) == CVI_SAPD_FLAG) {
-		NOTICE("Send sapd request\n");
-		rtc_latch_pinmux_settings();
-		rtc_power_saving_settings_for_suspend();
-		/* Enable power suspend wakeup source mask */
-		mmio_write_32(REG_RTC_BASE + 0x3C, 0x1); // 1 = select prdata from 32K domain
-		mmio_write_32(REG_RTC_CTRL_BASE + RTC_CTRL0_UNLOCKKEY, 0xAB18);
-		mmio_write_32(REG_RTC_BASE + RTC_EN_PWR_WAKEUP, 0x3F);
-		NOTICE("RTC_EN_PWR_WAKEUP=0x%x\n", mmio_read_32(REG_RTC_BASE + RTC_EN_PWR_WAKEUP));
-		mmio_write_32(REG_RTC_BASE + RTC_EN_SUSPEND_REQ, 0x01);
-		while (mmio_read_32(REG_RTC_BASE + RTC_EN_SUSPEND_REQ) != 0x01)
-			;
-		/* Send suspend request to RTC */
-		mmio_write_32(REG_RTC_CTRL_BASE + RTC_CTRL0, 0x00800080);
-		panic();
-	} else {
-		mmio_write_32(REG_RTC_BASE + RTC_EN_SHDN_REQ, 0x01);
-		while (mmio_read_32(REG_RTC_BASE + RTC_EN_SHDN_REQ) != 0x01)
-			;
-		mmio_write_32(REG_RTC_CTRL_BASE + RTC_CTRL0_UNLOCKKEY, 0xAB18);
-		mmio_setbits_32(REG_RTC_CTRL_BASE + RTC_CTRL0, 0xFFFF0800 | (0x1 << 0));
-		panic();
-	}
+	mmio_write_32(REG_RTC_BASE + RTC_EN_SHDN_REQ, 0x01);
+	while (mmio_read_32(REG_RTC_BASE + RTC_EN_SHDN_REQ) != 0x01)
+		;
+	mmio_write_32(REG_RTC_CTRL_BASE + RTC_CTRL0_UNLOCKKEY, 0xAB18);
+	mmio_setbits_32(REG_RTC_CTRL_BASE + RTC_CTRL0, 0xFFFF0800 | (0x1 << 0));
+	panic();
 }
 
 static void __dead2 bm_system_reset(void)
