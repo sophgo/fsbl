@@ -343,9 +343,19 @@ int load_blcp_2nd(int retry)
 	}
 
 	// load blcp 2nd image from flash to run comp address, and speed up freqency
-	ret = load_data_from_storage(image_buf,
-				     fip_param2.blcp_2nd_loadaddr,
-				     image_size, retry, is_emmc_boot_partition);
+	if (p_rom_api.get_boot_src() == BOOT_SRC_SPI_NAND) {
+		static int count = 0;
+		if (!count)
+			get_nand_info();
+
+		count++;
+		ret = cv_spi_nand_read_data(image_buf, fip_param2.blcp_2nd_loadaddr, image_size);
+	} else {
+		ret = load_data_from_storage(image_buf,
+			fip_param2.blcp_2nd_loadaddr,
+			image_size, retry, is_emmc_boot_partition);
+	}
+
 	if (ret < 0) {
 		ERROR("load data failed! loadaddr:0x%x, size:%d, retry:%d\n",
 		      fip_param2.blcp_2nd_loadaddr, image_size, retry);

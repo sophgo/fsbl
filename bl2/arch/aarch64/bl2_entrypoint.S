@@ -13,6 +13,7 @@
 	.globl	bl2_entrypoint
 	.globl	bl2_entrypoint_real
 	.globl  disable_mmu_el3
+	.global disable_mmu_icache_el3
 func bl2_entrypoint
 	b bl2_entrypoint_real
 	.word 0 // resvered

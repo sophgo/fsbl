@@ -25,6 +25,7 @@ BL2_INCLUDES += \
 BL2_SOURCES += \
 	drivers/ddr/ddr.c \
 	drivers/ddr/ddr_pkg_info.c \
+	drivers/ddr/ddr_suspend.c \
 	drivers/ddr/ddr_sys_bring_up.c \
 	drivers/ddr/ddr_sys.c \
 	drivers/ddr/phy_pll_init.c \
@@ -33,6 +34,9 @@ BL2_SOURCES += \
 	drivers/ddr/ddr_config/${DDR_CFG}/ddrc_init.c \
 	drivers/ddr/ddr_config/${DDR_CFG}/phy_init.c \
 	drivers/ddr/ddr_config/${DDR_CFG}/ddr_patch_regs.c
+
+BLDS_SOURCES += \
+	drivers/ddr/ddr_suspend.c
 
 ifneq ($(findstring ddr3, ${DDR_CFG}),)
     $(eval $(call add_define,DDR3))

@@ -81,6 +81,8 @@ extern uintptr_t __RO_END__;
 extern uintptr_t __BL2_END__;
 #elif defined(IMAGE_BL2U)
 extern uintptr_t __BL2U_END__;
+#elif defined(IMAGE_BLDS)
+extern uintptr_t __BLDS_END__;
 #elif defined(IMAGE_BL31)
 extern uintptr_t __BL31_END__;
 #elif defined(IMAGE_BL32)
@@ -214,11 +216,11 @@ int load_auth_image(unsigned int image_id, image_info_t *image_data);
 #else
 
 uintptr_t page_align(uintptr_t, unsigned);
-int load_image(meminfo_t *mem_layout,
-	       unsigned int image_id,
-	       uintptr_t image_base,
-	       image_info_t *image_data,
-	       entry_point_info_t *entry_point_info);
+// int load_image(meminfo_t *mem_layout,
+// 	       unsigned int image_id,
+// 	       uintptr_t image_base,
+// 	       image_info_t *image_data,
+// 	       entry_point_info_t *entry_point_info);
 int load_auth_image(meminfo_t *mem_layout,
 		    unsigned int image_id,
 		    uintptr_t image_base,

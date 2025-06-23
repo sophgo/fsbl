@@ -131,6 +131,7 @@ static inline void feed_dog(void)
 }
 
 void platform_setup(void);
+void platform_warmentry(void);
 void bringup_c906l(unsigned long addr);
 
 #endif /* __ASSEMBLY__ */

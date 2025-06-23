@@ -26,11 +26,11 @@ typedef struct timer_ops {
 
 void mdelay(uint32_t msec);
 void udelay(uint32_t usec);
-#ifdef IMAGE_BL2
+// #ifdef IMAGE_BL2
 void timer_init(void);
-#else
-void timer_init(const timer_ops_t *ops);
-#endif
+// #else
+// void timer_init(const timer_ops_t *ops);
+// #endif
 uint32_t get_timer(uint32_t base);
 uint32_t get_random_from_timer(uint32_t base);
 uint32_t read_count_tick(void);

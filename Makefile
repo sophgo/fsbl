@@ -420,33 +420,50 @@ ifeq ($(OD_CLK_SEL),y)
 $(eval $(call add_define,OD_CLK_SEL))
 endif
 
-# ifeq (${NEED_BL31},yes)
-# # Add RTC_CORE_SRAM_BIN_PATH into cv_pm.c
-# $(info RTC_CORE_SRAM_BIN_PATH is '${RTC_CORE_SRAM_BIN_PATH}')
-# ifeq ($(filter clean %clean clean%,$(MAKECMDGOALS)),)
-# ifeq (,$(wildcard ${RTC_CORE_SRAM_BIN_PATH}))
-# $(error RTC_CORE_SRAM_BIN_PATH is not existed)
-# else
-# $(shell touch -c plat/cvitek/${CHIP_ARCH}/common/cv_pm.c > /dev/null)
-# endif
-# endif
-# $(eval $(call add_define_val,RTC_CORE_SRAM_BIN_PATH,'"${RTC_CORE_SRAM_BIN_PATH}"'))
-# endif
-
 ################################################################################
 # Build targets
 ################################################################################
 .PHONY: all fip clean bl-check bl-build fake-blcp
 .SUFFIXES:
 
+include blds/blds.mk
+blds-build: blds
+$(info target blds-build start)
+$(eval $(call MAKE_BL,ds))
+
+blds-update: blds-build
+	cp ${BUILD_PLAT}/blds.bin $(CURDIR)/test/${CHIP_ARCH}/blds.bin
 ################################################################################
 # Build BL31
 ################################################################################
 
 ifeq (${NEED_BL31},yes)
+# Add RTC_CORE_SRAM_BIN_PATH into cv_pm.c
+PM_SRAM_BIN_ALTERNATIVE := "${RTC_CORE_SRAM_BIN_PATH}" \
+			   "$(CURDIR)/test/${CHIP_ARCH}/blds.bin" \
+			   "$(CURDIR)/test/blds.bin" \
+			   "$(CURDIR)/test/empty.bin"
+
+pm_sram_bin := $(shell \
+	       for p in ${PM_SRAM_BIN_ALTERNATIVE}; do \
+	           [ -n "$$p" ] && [ -f "$$p" ] && echo $$p && exit; \
+	       done)
+
+$(eval $(info RTC_CORE_SRAM_BIN_PATH=${pm_sram_bin}))
+$(eval $(call add_define_val,RTC_CORE_SRAM_BIN_PATH,'"${pm_sram_bin}"'))
+
+ifeq ($(filter clean %clean clean%,$(MAKECMDGOALS)),)
+ifeq (,$(wildcard ${pm_sram_bin}))
+$(error pm sram binary is not existed)
+else
+$(shell touch -c plat/cvitek/${CHIP_ARCH}/common/cv_pm.c > /dev/null)
+endif
+endif
+
 all: bl31
 BL31_SOURCES += ${SPD_SOURCES}
 $(eval $(call MAKE_BL,31,soc-fw))
+
 endif
 
 ifeq (${NEED_BL32},yes)

@@ -109,7 +109,7 @@ void spi_nand_rw_dma_setup(void *buf, uint32_t len, uint32_t rw)
 
                 // [0:2] = 1 : MEM_TO_PER_DMAC, PER dst = 0
                 mmio_write_32(BASE_SYSDMAC + 0x124 + ch * (0x100), 0x00000001);
-                mmio_write_32(0x03000154, 0x26); //PER dst = 0 => remap ch0
+                mmio_write_32(0x03000154, 0x2a); //PER dst = 0 => remap ch0
                 mmio_setbits_32(0x03000154, BIT(31)); // set sdma remap update bit
 
                 VERBOSE("0x100: 0x%lx\n", mmio_read_64(BASE_SYSDMAC + 0x100 + ch * (0x100)));
@@ -120,7 +120,7 @@ void spi_nand_rw_dma_setup(void *buf, uint32_t len, uint32_t rw)
                 mmio_write_32(BASE_SYSDMAC + 0x118 + ch * (0x100), 0x00046214);
                 // [0:2] = 2 : PER_TO_MEM_DMAC, PER src = 0
                 mmio_write_32(BASE_SYSDMAC + 0x124 + ch * (0x100), 0x00000002);
-                mmio_write_32(0x03000154, 0x26); //PER src = 0 => remap ch0
+                mmio_write_32(0x03000154, 0x2a); //PER src = 0 => remap ch0
                 mmio_setbits_32(0x03000154, BIT(31)); // set sdma remap update bit
 
                 VERBOSE("0x100: 0x%lx\n", mmio_read_64(BASE_SYSDMAC + 0x100 + ch * (0x100)));

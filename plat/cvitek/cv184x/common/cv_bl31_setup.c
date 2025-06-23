@@ -100,7 +100,7 @@ void bl31_platform_setup(void)
 	/* Initialize the gic cpu and distributor interfaces */
 	plat_arm_gic_driver_init();
 	plat_arm_gic_init();
-	generic_delay_timer_init();
+	timer_init();
 	bm_storage_boot_loader_version(BL31_VERSION_BASE);
 }
 

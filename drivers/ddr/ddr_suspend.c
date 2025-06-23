@@ -11,7 +11,6 @@
 #include "ddr_suspend.h"
 #include "bitwise_ops.h"
 // #include "regconfig.h"
-#include "rtc.h"
 #include "cvx16_dram_cap_check.h"
 #include <platform_def.h>
 #ifdef DDR2_3
@@ -21,38 +20,10 @@
 #include <ddr_init.h>
 #endif
 
-#define susp_read_csr(reg) ({ unsigned long __tmp; \
-	asm volatile ("csrr %0, " #reg : "=r"(__tmp)); \
-	__tmp; })
-SUSPEND_DATA uint32_t start, delta, total_delta;
-void susp_udelay(uint32_t delay)
-{
-	start = (uint32_t)(~susp_read_csr(time));
-
-	total_delta = (delay * 25);
-
-	mmio_write_32(REG_GP_REG2, total_delta);
-
-	do {
-		/*
-		 * If the timer value wraps around, the subtraction will
-		 * overflow and it will still give the correct result.
-		 */
-		delta = start - (uint32_t)(~susp_read_csr(time)); /* Decreasing counter */
-
-	} while (delta < total_delta);
-}
 
 void ddr_suspend_entry(void)
 {
 	ddr_sys_suspend_sus_res();
-	rtc_clr_ddr_pwrok();
-	rtc_clr_rmio_pwrok();
-#ifndef SUSPEND_USE_WDG_RST
-	rtc_req_suspend();
-#else
-	rtc_req_wdg_rst();
-#endif
 }
 
 void ddr_sys_suspend_sus_res(void)
@@ -143,7 +114,7 @@ void cvx16_ddr_phya_pd_sus_res(void)
 	mmio_wr32(0x40 + 0x03002900, rddata);
 }
 
-SUSPEND_DATA struct reg save_phy_regs[] = {
+struct reg save_phy_regs[] = {
 	{0x0 + PHYD_BASE_ADDR, 0x0},
 	{0x4 + PHYD_BASE_ADDR, 0x0},
 	{0x8 + PHYD_BASE_ADDR, 0x0},
@@ -349,56 +320,3 @@ void cvx16_ddr_phyd_save_sus_res(uint32_t rtc_sram_base)
 		psave_phy_regs[i].val = mmio_rd32(save_phy_regs[i].addr);
 	}
 }
-
-void rtc_clr_ddr_pwrok(void)
-{
-	mmio_clrbits_32(REG_RTC_BASE + RTC_PG_REG, 0x00000001);
-}
-
-void rtc_clr_rmio_pwrok(void)
-{
-	mmio_clrbits_32(REG_RTC_BASE + RTC_PG_REG, 0x00000002);
-}
-
-#ifndef SUSPEND_USE_WDG_RST
-void rtc_req_suspend(void)
-{
-	//info("Send suspend request\n");
-	/* Enable power suspend wakeup source mask */
-	mmio_write_32(REG_RTC_BASE + 0x3C, 0x1); // 1 = select prdata from 32K domain
-	mmio_write_32(REG_RTC_CTRL_BASE + RTC_CTRL0_UNLOCKKEY, 0xAB18);
-	mmio_write_32(REG_RTC_BASE + RTC_EN_SUSPEND_REQ, 0x01);
-	while (mmio_read_32(REG_RTC_BASE + RTC_EN_SUSPEND_REQ) != 0x01)
-		;
-	while (1) {
-		/* Send suspend request to RTC*/
-		susp_udelay(1000);
-		mmio_write_32(REG_RTC_CTRL_BASE + RTC_CTRL0, 0x00800080);
-	}
-}
-#else
-void rtc_req_wdg_rst(void)
-{
-	uint32_t write_data = 0;
-
-	write_data = mmio_rd32(REG_RTC_CTRL_BASE + 0x18); //rtcsys_rst_ctrl
-	write_data = write_data | (0x01 << 24); //reg_rtcsys_reset_en
-	mmio_wr32(REG_RTC_CTRL_BASE + 0x18, write_data); //
-	mmio_wr32(REG_RTC_BASE + 0xE8, 0x04); // RTC_DB_REQ_WARM_RST
-	mmio_wr32(REG_RTC_BASE + 0xE0, 0x01); // RTC_EN_WDG_RST_REQ
-	mmio_wr32(REG_RTC_CTRL_BASE + 0x60, 0xA5);	  // write dummy register
-	mmio_wr32(REG_RTC_CTRL_BASE + 0x04, 0xAB18);	  // rtc_ctrl0_unlockkey
-	write_data = mmio_rd32(REG_RTC_CTRL_BASE + 0x08); // rtc_ctrl0
-	//req_shdn         = rtc_ctrl0[0];
-	//req_sw_thm_shdn  = rtc_ctrl0[1];
-	//hw_thm_shdn_en   = rtc_ctrl0[2];
-	//req_pwr_cyc      = rtc_ctrl0[3];
-	//req_warm_rst     = rtc_ctrl0[4];
-	//req_sw_wdg_rst   = rtc_ctrl0[5];
-	//hw_wdg_rst_en    = rtc_ctrl0[6];
-	//req_suspend      = rtc_ctrl0[7];
-	write_data = 0xffff0000 | write_data | (0x01 << 5);
-	// printf("[RTC] ----> Set req_sw_wdg_rst to 1 by register setting\n");
-	mmio_wr32(REG_RTC_CTRL_BASE + 0x08, write_data); //rtc_ctrl0
-}
-#endif
