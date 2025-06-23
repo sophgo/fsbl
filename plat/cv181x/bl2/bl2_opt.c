@@ -426,10 +426,9 @@ int load_user_param_and_logo(int retry)
 int load_monitor(int retry, uint64_t *monitor_entry)
 {
 	int ret = -1;
-
+	uint32_t crc;
 	NOTICE("MS/0x%x/0x%x/0x%x.\n", fip_param2.monitor_loadaddr,
 	       fip_param2.monitor_runaddr, fip_param2.monitor_size);
-
 	if (!fip_param2.monitor_runaddr) {
 		NOTICE("No monitor.\n");
 		return 0;
@@ -465,18 +464,17 @@ int load_monitor(int retry, uint64_t *monitor_entry)
 			return ret;
 	}
 
-	// crc = p_rom_api_image_crc((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_size);
-	// if (crc != fip_param2.monitor_cksum) {
-	// 	ERROR("monitor_cksum (0x%x/0x%x)\n", crc, fip_param2.monitor_cksum);
-	// 	return -1;
-	// }
+	crc = p_rom_api_image_crc((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_size);
+	if (crc != fip_param2.monitor_cksum) {
+		ERROR("monitor_cksum (0x%x/0x%x)\n", crc, fip_param2.monitor_cksum);
+		return -1;
+	}
 
-	// ret = dec_verify_image((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_size, 0, fip_param1);
-	// if (ret < 0) {
-	// 	ERROR("verify monitor (%d)\n", ret);
-	// 	return ret;
-	// }
-
+	ret = dec_verify_image((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_size, 0, fip_param1);
+	if (ret < 0) {
+		ERROR("verify monitor (%d)\n", ret);
+		return ret;
+	}
 	flush_dcache_range(fip_param2.monitor_runaddr, fip_param2.monitor_size);
 	NOTICE("ME.\n");
 

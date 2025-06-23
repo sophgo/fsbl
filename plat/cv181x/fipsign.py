@@ -39,7 +39,35 @@ class SignedFIP(FIP):
 
         # Verity the reading of fip.bin
         with open(path, "rb") as fp:
-            assert fp.read() == self.make()
+            original_data = fp.read()
+            generated_data = self.make(sign_flag=True)
+            if len(original_data) != len(generated_data):
+                logging.error("Size mismatch: original=%d bytes, generated=%d bytes", 
+                            len(original_data), len(generated_data))
+                
+            if len(original_data) == len(generated_data):
+                for i, (orig_byte, gen_byte) in enumerate(zip(original_data, generated_data)):
+                    if orig_byte != gen_byte:
+                        logging.error("First difference at offset %d: original=0x%02x, generated=0x%02x",
+                                    i, orig_byte, gen_byte)
+                        context_size = 16
+                        start = max(0, i - context_size)
+                        end = min(len(original_data), i + context_size)
+                        logging.error("Original context: %s", 
+                                    original_data[start:end].hex())
+                        logging.error("Generated context: %s", 
+                                    generated_data[start:end].hex())
+                        break
+            logging.debug("Original FIP size: %d bytes", len(original_data))
+            logging.debug("Original FIP segments:")
+            for name, entry in self.body1.items():
+                if entry.content:
+                    logging.debug("  %s: size=%d bytes", name, len(entry.content))
+            for name, entry in self.body2.items():
+                if entry.content:
+                    logging.debug("  %s: size=%d bytes", name, len(entry.content))
+                    
+            assert original_data == generated_data, "FIP content mismatch"
 
     def rsa_to_n(self, rsa):
         return rsa.n.to_bytes(rsa.size_in_bytes(), byteorder="big")
@@ -182,7 +210,7 @@ def encrypt_fip(args):
     fip.sign()
     fip.encrypt()
 
-    fip_bin = fip.make()
+    fip_bin = fip.make(sign_flag=True)
     fip.print_fip_params()
     with open(args.DEST_FIP, "wb") as fp:
         fp.write(fip_bin)
