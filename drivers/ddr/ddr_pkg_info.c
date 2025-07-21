@@ -92,7 +92,7 @@ void read_ddr_pkg_info(void)
 	//if onebin, need to set datarate here
 
 	pkg = FIELD_GET(efuse_leakage, 2, 0);
-	pkg = PKG_BGA;
+	pkg = PKG_QFN;
 
 	switch (ddr_capacity) {
 	case DDR_CAPACITY_512M:

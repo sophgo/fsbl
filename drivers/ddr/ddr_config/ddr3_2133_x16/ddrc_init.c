@@ -162,13 +162,13 @@ void ddrc_init(void)
 	// SCHED1.pageclose_timer:0:8:=0x0
 
 	// auto gen.
-	mmio_wr32(0x08004000 + 0x25c, 0x10000110);
+	mmio_wr32(0x08004000 + 0x25c, 0x100000b1);
 	// PERFHPR1.hpr_xact_run_length:24:8:=0x20
 	// PERFHPR1.hpr_max_starve:0:16:=0x6a
-	mmio_wr32(0x08004000 + 0x264, 0x10000110);
+	mmio_wr32(0x08004000 + 0x264, 0x100000b1);
 	// PERFLPR1.lpr_xact_run_length:24:8:=0x20
 	// PERFLPR1.lpr_max_starve:0:16:=0x6a
-	mmio_wr32(0x08004000 + 0x26c, 0x10000110);
+	mmio_wr32(0x08004000 + 0x26c, 0x10000162);
 	// PERFWR1.w_xact_run_length:24:8:=0x20
 	// PERFWR1.w_max_starve:0:16:=0x1a8
 

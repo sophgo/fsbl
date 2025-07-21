@@ -401,10 +401,13 @@ int cv_spi_nand_read_data(void * buffer, uint32_t offset, uint32_t size)
 
 void cv_spi_nand_set_freq(uint8_t sck_l, uint8_t sck_h, uint16_t prd)
 {
-	INFO("before set_freq:REG_SPI_NAND_BOOT_CTRL:%x\n", mmio_read_32(spi_nand_ctrl_base + REG_SPI_NAND_BOOT_CTRL));
-	INFO("before set_freq:REG_SPI_NAND_TRX_CTRL1:%x\n", mmio_read_32(spi_nand_ctrl_base + REG_SPI_NAND_TRX_CTRL1));
+	VERBOSE("Before:NAND:CTRL:0x%x/CTRL1:0x%x\n",
+			mmio_read_32(spi_nand_ctrl_base + REG_SPI_NAND_BOOT_CTRL),
+			mmio_read_32(spi_nand_ctrl_base + REG_SPI_NAND_TRX_CTRL1));
+
 	uint32_t val;
 
+	mmio_write_32(spi_nand_ctrl_base + REG_SPI_NAND_BOOT_CTRL, 0x100);
 	mmio_write_32(spi_nand_ctrl_base + REG_SPI_NAND_BOOT_CTRL,
 			    ((mmio_read_32(spi_nand_ctrl_base + REG_SPI_NAND_BOOT_CTRL) & 0xFFFFFFFE) | prd));
 
@@ -413,6 +416,8 @@ void cv_spi_nand_set_freq(uint8_t sck_l, uint8_t sck_h, uint16_t prd)
 	val |= SPI_NAND_SET_SCK_L(sck_l) | SPI_NAND_SET_SCK_H(sck_h);
 
 	mmio_write_32(spi_nand_ctrl_base + REG_SPI_NAND_TRX_CTRL1, val);
-	INFO("after set_freq:REG_SPI_NAND_BOOT_CTRL:%x\n", mmio_read_32(spi_nand_ctrl_base + REG_SPI_NAND_BOOT_CTRL));
-	INFO("after set_freq:REG_SPI_NAND_TRX_CTRL1:%x\n", mmio_read_32(spi_nand_ctrl_base + REG_SPI_NAND_TRX_CTRL1));
+
+	NOTICE("NAND:CTRL:0x%x/CTRL1:0x%x\n",
+			mmio_read_32(spi_nand_ctrl_base + REG_SPI_NAND_BOOT_CTRL),
+			mmio_read_32(spi_nand_ctrl_base + REG_SPI_NAND_TRX_CTRL1));
 }

@@ -443,6 +443,19 @@ void set_rtc_en_registers(void)
 	mmio_clrbits_32(REG_RTC_BASE + RTC_EN_PWR_VBAT_DET, BIT(2));
 }
 
+#ifdef RTOS_ENABLE_FREERTOS
+void memcpy_u32(void *dst, void *src, int size)
+{
+	int i = 0;
+
+	for (i = 0; i < size / 4; i++) {
+		*(unsigned int *)dst = *(unsigned int *)src;
+		dst += 4;
+		src += 4;
+	}
+}
+#endif
+void init_comm_info(void) __attribute((optimize("O0")));
 void init_comm_info(void)
 {
 #ifdef RTOS_ENABLE_FREERTOS
@@ -470,7 +483,7 @@ void init_comm_info(void)
 	}
 
 	transfer_config_s.checksum = checksum;
-	memcpy(transfer_config, &transfer_config_s, sizeof(struct transfer_config_t));
+	memcpy_u32((void *)transfer_config, (void *)&transfer_config_s, sizeof(struct transfer_config_t));
 #endif
 }
 

@@ -252,7 +252,7 @@ retry_from_flash:
 	time_records->ddr_init_end = read_time_ms();
 	return 0;
 }
-
+#ifndef RTOS_ENABLE_FREERTOS
 static int check_blcp_2nd_header(struct fip_param2 _param2)
 {
 	if (!_param2.blcp_2nd_runaddr) {
@@ -304,19 +304,124 @@ static int check_blcp_2nd_header(struct fip_param2 _param2)
 
 	return 0;
 }
+#endif
+int load_user_param_and_logo(int retry)
+{
+#ifdef LOGO_OFFSET
+    int ret = -1;
+    void *image_buf = NULL;
+	u_int8_t is_emmc_boot_partition = 1;
+
+    image_buf  = (void *)(uintptr_t)CVIMMAP_RTOS_LOGO_ADDR;
+
+    NOTICE("LOGO:0x%x/0x%d/0x%p\n", LOGO_OFFSET, LOGO_SIZE, image_buf);
+    if (p_rom_api.get_boot_src() == BOOT_SRC_EMMC)
+        is_emmc_boot_partition = 0;
+
+    // load blcp 2nd image from flash to run comp address, and speed up freqency
+    if (p_rom_api.get_boot_src() == BOOT_SRC_SPI_NAND) {
+        static int count = 0;
+        if (!count)
+            get_nand_info();
+
+        count++;
+        ret = cv_spi_nand_read_data(image_buf, LOGO_OFFSET, LOGO_SIZE);
+    } else {
+        ret = load_data_from_storage(image_buf, LOGO_OFFSET, LOGO_SIZE, retry,
+                                     is_emmc_boot_partition);
+    }
+
+    if (ret < 0) {
+        ERROR("load data failed! loadaddr:0x%x, size:%d, retry:%d\n",
+              LOGO_OFFSET, LOGO_SIZE, retry);
+        return ret;
+    }
+
+    NOTICE("UPE.\n");
+#endif
+    return 0;
+}
 
 int load_blcp_2nd(int retry)
 {
 	int ret = -1;
 	// uint32_t crc = 0;
 	uint32_t rtos_base = 0;
+#ifndef RTOS_ENABLE_FREERTOS
 	void *image_buf = NULL;
 	uint32_t image_size = 0;
+#endif
 	u_int8_t is_emmc_boot_partition = 1;
 
 	// if no blcp_2nd, set release_blcp_2nd previou and change it end of function.
 	time_records->release_blcp_2nd = read_time_ms();
 
+
+#ifdef RTOS_ENABLE_FREERTOS
+	// if no blcp_2nd, release_blcp_2nd should be ddr_init_end
+	NOTICE("C2S/0x%x/0x%x/0x%x.\n", fip_param2.blcp_2nd_loadaddr, fip_param2.blcp_2nd_runaddr,
+		fip_param2.blcp_2nd_size);
+
+	if ((p_rom_api.get_boot_src() == BOOT_SRC_SD
+		|| p_rom_api.get_boot_src() == BOOT_SRC_USB
+		|| p_rom_api.get_boot_src() == BOOT_SRC_UART)) {
+		NOTICE("Wouldn't boot up RTOS, cause image didn't build in to fip.bin when boot src is SD.\n");
+		return 0;
+	}
+
+	if (!fip_param2.blcp_2nd_runaddr) {
+		NOTICE("No C906L image.\n");
+		return 0;
+	}
+
+	if (!IN_RANGE(fip_param2.blcp_2nd_runaddr, DRAM_BASE, DRAM_SIZE))
+		ERROR("blcp_2nd_runaddr (0x%x) is not in DRAM.\n", fip_param2.blcp_2nd_runaddr);
+
+	if (!IN_RANGE(fip_param2.blcp_2nd_runaddr + fip_param2.blcp_2nd_size, DRAM_BASE, DRAM_SIZE))
+		ERROR("blcp_2nd_size (0x%x) is not in DRAM.\n", fip_param2.blcp_2nd_size);
+
+	// fip_param2.blcp_2nd_loadaddr == 0, means didn't build in fip.bin.
+	if (!fip_param2.blcp_2nd_loadaddr) {
+		#ifdef SECOND_OFFSET
+		//reset the loadaddr to SECOND_OFFSET from xmp partitions.
+		fip_param2.blcp_2nd_loadaddr = SECOND_OFFSET;
+		#endif
+		if (p_rom_api.get_boot_src() == BOOT_SRC_EMMC)
+			is_emmc_boot_partition = 0;
+	}
+
+	ret = load_data_from_storage((void *)(uintptr_t)fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_loadaddr,
+	   fip_param2.blcp_2nd_size, retry, is_emmc_boot_partition);
+	if (ret < 0){
+		ERROR("load blcp 2nd (%d)\n", ret);
+		return ret;
+	}
+
+	// ret = dec_verify_image((void *)(uintptr_t)fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_size, 0, fip_param1);
+	// if (ret < 0) {
+	// 	ERROR("verify blcp 2nd (%d)\n", ret);
+	// 	return ret;
+	// }
+
+	flush_dcache_range(fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_size);
+
+	rtos_base = mmio_read_32(AXI_SRAM_RTOS_BASE);
+	init_comm_info();
+
+	switch (p_rom_api.get_boot_src()) {
+	case BOOT_SRC_UART:
+		// case BOOT_SRC_SD:
+		// case BOOT_SRC_USB:
+		break;
+
+	default:
+		time_records->release_blcp_2nd = read_time_ms();
+		if (rtos_base == CVI_RTOS_MAGIC_CODE)
+			mmio_write_32(AXI_SRAM_RTOS_BASE, fip_param2.blcp_2nd_runaddr);
+		else
+			reset_c906l(fip_param2.blcp_2nd_runaddr);
+	}
+#else
 	NOTICE("C2S/0x%x/0x%x/0x%x, 0x%x/0x%x/0x%x.\n",
 	       fip_param2.blcp_2nd_comp_type, fip_param2.blcp_2nd_comp_size, fip_param2.blcp_2nd_comp_addr,
 	       fip_param2.blcp_2nd_loadaddr, fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_size);
@@ -413,7 +518,7 @@ int load_blcp_2nd(int retry)
 		else
 			reset_c906l(fip_param2.blcp_2nd_runaddr);
 	}
-
+#endif
 	NOTICE("C2E.\n");
 	return 0;
 }
@@ -798,7 +903,7 @@ void fip_src_check(void)
 int load_rest(void)
 {
 	int retry = 0;
-
+	enum boot_src cur_boot_src;
 	uint64_t monitor_entry = MONITOR_RUNADDR;
 	// uint64_t monitor_entry = 0;
 	uint64_t loader_2nd_entry = 0x80200000 + sizeof(struct loader_2nd_header);
@@ -807,15 +912,30 @@ int load_rest(void)
 	sys_pll_init();
 
 	//get current boot source
-	if (p_rom_api.get_boot_src() == BOOT_SRC_EMMC)
-		bm_emmc_init(); //reinit eMMC
+	cur_boot_src = p_rom_api.get_boot_src();
 
-	// Todo: nand set clk to 75M first
-	mmio_write_32(0x04060000 + REG_SPI_NAND_BOOT_CTRL, 0x100);
-	cv_spi_nand_set_freq(1, 1, 0);
+	switch (cur_boot_src) {
+	case BOOT_SRC_SPI_NOR:
+	case BOOT_SRC_RTC_NOR:
+		break;
+	case BOOT_SRC_EMMC:
+		bm_emmc_init(); //reinit eMMC
+		break;
+	default:
+		// TODO: nand set clk to 75M first
+		cv_spi_nand_set_freq(1, 1, 0);
+		break;
+	}
 
 retry_from_flash:
 	for (retry = 0; retry < p_rom_api.get_number_of_retries(); retry++) {
+		// if (load_user_param_and_logo(retry) < 0)
+		// 	continue;
+		if (cur_boot_src != BOOT_SRC_USB && cur_boot_src != BOOT_SRC_UART && cur_boot_src != BOOT_SRC_SD) {
+			if (load_user_param_and_logo(retry) < 0)
+				continue;
+		}
+
 		if (load_blcp_2nd(retry) < 0)
 			continue;
 
