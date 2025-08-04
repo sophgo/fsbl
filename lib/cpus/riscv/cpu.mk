@@ -29,7 +29,8 @@ CPU_SOURCES := \
 	lib/cpus/${BOOT_CPU}/cpu_helper.c \
 	lib/cpus/${BOOT_CPU}/misc_helpers.c \
 	lib/cpus/${BOOT_CPU}/cache.c \
-	drivers/delay_timer/${BOOT_CPU}/delay_timer.c \
+	drivers/delay_timer/delay_timer.c \
+	drivers/delay_timer/generic_delay_timer.c \
 	bl2/arch/${BOOT_CPU}/bl2_helper.c \
 	drivers/uart/uart_dw.c
 

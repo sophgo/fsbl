@@ -41,6 +41,6 @@ BLDS_CPPFLAGS += \
 	-Wmissing-include-dirs -Werror
 
 BLds_CFLAGS += -ggdb3 -gdwarf-2 -fno-stack-protector -Os \
-	       ${BLDS_CPPFLAGS}
+	       ${BLDS_CPPFLAGS} -DIMAGE_BL2
 
 BLDS_ASFLAGS += -g -Wa,--gdwarf-2

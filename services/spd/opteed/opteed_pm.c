@@ -59,26 +59,26 @@ static int32_t opteed_cpu_off_handler(uint64_t unused)
  ******************************************************************************/
 static void opteed_cpu_suspend_handler(uint64_t max_off_pwrlvl)
 {
-	// int32_t rc = 0;
-	// uint32_t linear_id = plat_my_core_pos();
-	// optee_context_t *optee_ctx = &opteed_sp_context[linear_id];
+	int32_t rc = 0;
+	uint32_t linear_id = plat_my_core_pos();
+	optee_context_t *optee_ctx = &opteed_sp_context[linear_id];
 
-	// assert(optee_vectors);
-	// assert(get_optee_pstate(optee_ctx->state) == OPTEE_PSTATE_ON);
+	assert(optee_vectors);
+	assert(get_optee_pstate(optee_ctx->state) == OPTEE_PSTATE_ON);
 
-	// /* Program the entry point and enter OPTEE */
-	// cm_set_elr_el3(SECURE, (uint64_t)&optee_vectors->cpu_suspend_entry);
-	// rc = opteed_synchronous_sp_entry(optee_ctx);
+	/* Program the entry point and enter OPTEE */
+	cm_set_elr_el3(SECURE, (uint64_t)&optee_vectors->cpu_suspend_entry);
+	rc = opteed_synchronous_sp_entry(optee_ctx);
 
-	// /*
-	//  * Read the response from OPTEE. A non-zero return means that
-	//  * something went wrong while communicating with OPTEE.
-	//  */
-	// if (rc != 0)
-	// 	panic();
+	/*
+	 * Read the response from OPTEE. A non-zero return means that
+	 * something went wrong while communicating with OPTEE.
+	 */
+	if (rc != 0)
+		panic();
 
-	// /* Update its context to reflect the state OPTEE is in */
-	// set_optee_pstate(optee_ctx->state, OPTEE_PSTATE_SUSPEND);
+	/* Update its context to reflect the state OPTEE is in */
+	set_optee_pstate(optee_ctx->state, OPTEE_PSTATE_SUSPEND);
 }
 
 /*******************************************************************************
@@ -125,29 +125,29 @@ static void opteed_cpu_on_finish_handler(uint64_t unused)
  ******************************************************************************/
 static void opteed_cpu_suspend_finish_handler(uint64_t max_off_pwrlvl)
 {
-	// int32_t rc = 0;
-	// uint32_t linear_id = plat_my_core_pos();
-	// optee_context_t *optee_ctx = &opteed_sp_context[linear_id];
+	int32_t rc = 0;
+	uint32_t linear_id = plat_my_core_pos();
+	optee_context_t *optee_ctx = &opteed_sp_context[linear_id];
 
-	// assert(optee_vectors);
-	// assert(get_optee_pstate(optee_ctx->state) == OPTEE_PSTATE_SUSPEND);
+	assert(optee_vectors);
+	assert(get_optee_pstate(optee_ctx->state) == OPTEE_PSTATE_SUSPEND);
 
-	// /* Program the entry point, max_off_pwrlvl and enter the SP */
-	// write_ctx_reg(get_gpregs_ctx(&optee_ctx->cpu_ctx),
-	// 	      CTX_GPREG_X0,
-	// 	      max_off_pwrlvl);
-	// cm_set_elr_el3(SECURE, (uint64_t)&optee_vectors->cpu_resume_entry);
-	// rc = opteed_synchronous_sp_entry(optee_ctx);
+	/* Program the entry point, max_off_pwrlvl and enter the SP */
+	write_ctx_reg(get_gpregs_ctx(&optee_ctx->cpu_ctx),
+		      CTX_GPREG_X0,
+		      max_off_pwrlvl);
+	cm_set_elr_el3(SECURE, (uint64_t)&optee_vectors->cpu_resume_entry);
+	rc = opteed_synchronous_sp_entry(optee_ctx);
 
-	// /*
-	//  * Read the response from OPTEE. A non-zero return means that
-	//  * something went wrong while communicating with OPTEE.
-	//  */
-	// if (rc != 0)
-	// 	panic();
+	/*
+	 * Read the response from OPTEE. A non-zero return means that
+	 * something went wrong while communicating with OPTEE.
+	 */
+	if (rc != 0)
+		panic();
 
-	// /* Update its context to reflect the state OPTEE is in */
-	// set_optee_pstate(optee_ctx->state, OPTEE_PSTATE_ON);
+	/* Update its context to reflect the state OPTEE is in */
+	set_optee_pstate(optee_ctx->state, OPTEE_PSTATE_ON);
 }
 
 /*******************************************************************************

@@ -378,7 +378,7 @@ static int cvsp_privte_smc_handler_init(void)
 		NOTICE("%s()\n", __func__);
 
 		mbedtls_init();
-		timer_init();
+		generic_delay_timer_init();
 
 		ready = 1;
 	}
