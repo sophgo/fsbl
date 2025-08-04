@@ -195,7 +195,7 @@ def sign_fip(args):
 
     fip.sign()
 
-    fip_bin = fip.make()
+    fip_bin = fip.make(sign_flag=True)
     fip.print_fip_params()
     with open(args.DEST_FIP, "wb") as fp:
         fp.write(fip_bin)
