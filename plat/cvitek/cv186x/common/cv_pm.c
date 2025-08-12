@@ -221,7 +221,6 @@ void bm_pwr_domain_off(const psci_power_state_t *target_state)
 void bm_pwr_domain_suspend(const psci_power_state_t *target_state)
 {
 	print_entry(__func__);
-	suspend_set_irq_routel3();
 }
 
 /*******************************************************************************
@@ -250,30 +249,38 @@ void bm_pwr_domain_on_finish(const psci_power_state_t *target_state)
 void bm_pwr_domain_suspend_finish(const psci_power_state_t *target_state)
 {
 	print_entry(__func__);
-	suspend_restore_irqel3();
+	uintptr_t *mailbox = (void *)PLAT_BM_TRUSTED_MAILBOX_BASE;
+
+	*mailbox = secure_entrypoint;
+
 	bm_ncore_enable_cluster(BM_CORE_UP);
 	/* Two GIC related initialized functions should be applied after CPU reset*/
 	/* Global gic distributor init => gicv2_distif_init() */
 	/* Per cpu gic distributor setup => gicv2_pcpu_distif_init() */
-	//plat_arm_gic_init();
+	plat_arm_gic_init();
+
+	mmio_clrbits_32(0x281021a4, 1 << 25); //uart0
+
+	//deassert mcu reset
+	mmio_setbits_32(0x5025018, 0x1 << 1);
 }
 
-#if 0
+#if 1
 __asm__(".section .rodata\n"
-	".global rtc_core_sram_bin\n"
-	".global rtc_core_sram_bin_end\n"
-	".type rtc_core_sram_bin,%object\n"
-	".type rtc_core_sram_bin_end,%object\n"
+	".global pm_sram_bin\n"
+	".global pm_sram_bin_end\n"
+	".type pm_sram_bin,%object\n"
+	".type pm_sram_bin_end,%object\n"
 	".balign 16\n"
-	"rtc_core_sram_bin:\n"
+	"pm_sram_bin:\n"
 	".incbin \"" RTC_CORE_SRAM_BIN_PATH "\"\n"
 	".balign 16\n"
-	"rtc_core_sram_bin_end:\n"
+	"pm_sram_bin_end:\n"
 	".text\n");
 #endif
 
-extern uint8_t rtc_core_sram_bin[];
-extern uint8_t rtc_core_sram_bin_end[];
+extern uint8_t pm_sram_bin[];
+extern uint8_t pm_sram_bin_end[];
 
 void rtc_latch_pinmux_settings(void)
 {
@@ -315,12 +322,54 @@ void rtc_power_saving_settings_for_suspend(void)
 	printf("%s\n", __func__);
 }
 
+static void bm_bisr_power_down_prepare(void)
+{
+	mmio_write_32(0x050250d0, 0); //PWR_CTL_OUT = 0
+	mmio_write_32(0x050250dc, 0); //PDG_EN0 = 0
+	mmio_write_32(0x050250e0, 0); //PDG_EN1 = 0
+	mmio_write_32(0x050250e4, 0); //PDG_EN2 = 0
+	mmio_write_32(0x050250e8, 0); //PDG_EN3 = 0
+	mmio_write_32(0x050250d8, 0); //REPAIR_EN = 0
+
+	//assert mcu reset
+	mmio_clrbits_32(0x05025018, 0x1 << 1);
+	//pwr button pin_mux
+	mmio_write_32(0x05027008, 0x3803);
+}
+
 /*******************************************************************************
  * Copy suspend code into RTC CORE SRAM
  ******************************************************************************/
 	extern void plat_resume_entry(void);
 
-void plat_primary_suspend(void)
+__dead2 static void bm_plat_suspend_to_ram(void)
+{
+	void (*suspend_func)(void) = (void *)PM_SRAM_BASE;
+
+	mmio_write_64(PM_SRAM_FLAG_ADDR, (uintptr_t)plat_resume_entry);
+
+	mmio_setbits_32(0x28102168, 0x3 << 16);
+
+	memcpy((void *)PM_SRAM_BASE, pm_sram_bin, pm_sram_bin_end - pm_sram_bin);
+
+	//rtc_latch_pinmux_settings();
+	//rtc_power_saving_settings_for_suspend();
+	bm_bisr_power_down_prepare();
+
+	flush_dcache_range(PM_SRAM_BASE, PM_SRAM_TOTAL_SIZE);
+	asm volatile("ic iallu" : : : "memory");
+	isb();
+	dsbsy();
+
+	disable_mmu_el3();
+
+	suspend_func();
+
+	/* Should never reach here */
+	panic();
+}
+
+static void bm_plat_suspend_wfi(void)
 {
 	disable_mmu_el3();
 
@@ -335,10 +384,12 @@ void plat_primary_suspend(void)
 	mmio_clrbits_32(0x28102600, 0x5400);
 	mmio_clrbits_32(0x28102700, 0x5400);
 	mmio_clrbits_32(0x28102900, 0x5400);
+	suspend_set_irq_routel3();
 	isb();
 	dsbsy();
 	wfi();
 	// pll up & switch to pll
+	suspend_restore_irqel3();
 	mmio_setbits_32(0x28102400, 0x5400);
 	mmio_setbits_32(0x28102500, 0x5400);
 	mmio_setbits_32(0x28102600, 0x5400);
@@ -349,6 +400,16 @@ void plat_primary_suspend(void)
 	mmio_write_32(0x281021a0, 0);
 	mmio_write_32(0x281021a4, 0);
 	mmio_write_32(0x281021a8, 0);
+}
+
+void plat_primary_suspend(void)
+{
+	uint32_t ddr_type = mmio_read_32(PM_SRAM_DDR_INFO) >> 16 & 0xff;
+	// lpddr4 && lpddr4x suspent to ram
+	if (ddr_type == 0x2 || ddr_type == 0x3)
+		bm_plat_suspend_to_ram();
+	else
+		bm_plat_suspend_wfi();
 
 	plat_resume_entry();
 	mdelay(500);
@@ -368,6 +429,7 @@ void plat_non_primary_suspend_entry(void)
 	do {
 		wfe();
 	} while (mmio_read_32(PM_NON_PRIMARY_CPU_HOLD) & (0x1 << idx));
+
 	plat_resume_entry();
 }
 

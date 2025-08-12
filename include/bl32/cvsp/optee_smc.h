@@ -589,6 +589,11 @@
 
 #define OPTEE_SMC_FUNID_CV_SPACC_BASE64 0x0D
 #define OPTEE_SMC_FUNID_CV_SPACC_SHA256	0x0E
+#define OPTEE_SMC_FUNID_CV_SPACC_AES 0x0F
+#define OPTEE_SMC_FUNID_CV_SPACC_SM4 0x10
+#define OPTEE_SMC_FUNID_CV_SPACC_DES 0x11
+#define OPTEE_SMC_FUNID_CV_SPACC_TDES 0x12
+#define OPTEE_SMC_FUNID_CV_SPACC_SM3 0x13
 
 #define OPTEE_SMC_CALL_CV_DEBUG                                                \
 	OPTEE_SMC_CALL_VAL(OPTEE_SMC_32, OPTEE_SMC_STD_CALL,                   \
@@ -648,4 +653,23 @@
 	OPTEE_SMC_CALL_VAL(OPTEE_SMC_32, OPTEE_SMC_STD_CALL,                   \
 			   OPTEE_SMC_OWNER_OEM, OPTEE_SMC_FUNID_CV_SPACC_SHA256)
 
+#define OPTEE_SMC_CALL_CV_AES                                                  \
+	OPTEE_SMC_CALL_VAL(OPTEE_SMC_32, OPTEE_SMC_STD_CALL,                   \
+			   OPTEE_SMC_OWNER_OEM, OPTEE_SMC_FUNID_CV_SPACC_AES)
+
+#define OPTEE_SMC_CALL_CV_SM4                                                  \
+	OPTEE_SMC_CALL_VAL(OPTEE_SMC_32, OPTEE_SMC_STD_CALL,                   \
+			   OPTEE_SMC_OWNER_OEM, OPTEE_SMC_FUNID_CV_SPACC_SM4)
+
+#define OPTEE_SMC_CALL_CV_DES                                                  \
+	OPTEE_SMC_CALL_VAL(OPTEE_SMC_32, OPTEE_SMC_STD_CALL,                   \
+			   OPTEE_SMC_OWNER_OEM, OPTEE_SMC_FUNID_CV_SPACC_DES)
+
+#define OPTEE_SMC_CALL_CV_TDES                                                 \
+	OPTEE_SMC_CALL_VAL(OPTEE_SMC_32, OPTEE_SMC_STD_CALL,                   \
+			   OPTEE_SMC_OWNER_OEM, OPTEE_SMC_FUNID_CV_SPACC_TDES)
+
+#define OPTEE_SMC_CALL_CV_SM3                                                  \
+	OPTEE_SMC_CALL_VAL(OPTEE_SMC_32, OPTEE_SMC_STD_CALL,                   \
+			   OPTEE_SMC_OWNER_OEM, OPTEE_SMC_FUNID_CV_SPACC_SM3)
 #endif /* OPTEE_SMC_H */

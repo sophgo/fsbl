@@ -143,6 +143,7 @@ $(eval IMAGE := IMAGE_BL$(call uppercase,$(3)))
 $(OBJ): ${EXTRA_DEPS}
 $(OBJ): $(2) | bl$(3)_dirs
 	@echo "  CC      $$<"
+	@echo "  CC      BL$(3)_CFLAGS"
 	$$(Q)$$(CC) $$(BL$(3)_CFLAGS) $$(CFLAGS) -D$(IMAGE) $(MAKE_DEP) -c $$< -o $$@
 
 -include $(DEP)
@@ -321,7 +322,7 @@ BUILD_MESSAGE_TIMESTAMP := "$(shell date -Is)"
 define MAKE_BL
         $(eval BUILD_DIR  := ${BUILD_PLAT}/bl$(1))
         $(eval BL_SOURCES := $(BL$(call uppercase,$(1))_SOURCES))
-        $(eval SOURCES    := $(if $(filter 2 macros,${1}),$(BL_SOURCES),$(BL_SOURCES) $(BL31_COMMON_SOURCES) $(PLAT_BL_COMMON_SOURCES)))
+        $(eval SOURCES    := $(if $(filter 2 macros ds,${1}),$(BL_SOURCES),$(BL_SOURCES) $(BL31_COMMON_SOURCES) $(PLAT_BL_COMMON_SOURCES)))
         $(eval OBJS       := $(addprefix $(BUILD_DIR)/,$(call SOURCES_TO_OBJS,$(SOURCES))))
         $(eval LINKERFILE := $(call IMG_LINKERFILE,$(1)))
         $(eval MAPFILE    := $(call IMG_MAPFILE,$(1)))

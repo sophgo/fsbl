@@ -125,7 +125,7 @@ typedef struct emmc_ops {
 	void (*init)(void);
 	void (*reset)(void);
 	int (*send_cmd)(emmc_cmd_t *cmd);
-	int (*set_ios)(int clk, int width);
+	int (*set_ios)(int clk, int width, int is_hs_mode);
 	int (*prepare)(int lba, uintptr_t buf, size_t size);
 	int (*read)(int lba, uintptr_t buf, size_t size);
 	int (*write)(int lba, const uintptr_t buf, size_t size);

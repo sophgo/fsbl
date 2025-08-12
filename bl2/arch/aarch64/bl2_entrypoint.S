@@ -116,6 +116,7 @@ do_disable_mmu:
 	ret
 endfunc disable_mmu_el3
 
+	.global disable_mmu_icache_el3
 func disable_mmu_icache_el3
 	mov	x1, #(SCTLR_M_BIT | SCTLR_C_BIT | SCTLR_I_BIT)
 	b	do_disable_mmu

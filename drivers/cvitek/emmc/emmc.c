@@ -81,6 +81,7 @@ static int emmc_set_ext_csd(unsigned int ext_cmd, unsigned int value)
 static int emmc_set_ios(int clk, int bus_width)
 {
 	int ret;
+	int is_hs;
 
 	/* set IO speed & IO bus width */
 	if (emmc_csd.spec_vers == 4) {
@@ -89,7 +90,15 @@ static int emmc_set_ios(int clk, int bus_width)
 			return ret;
 	}
 
-	return ops->set_ios(clk, bus_width);
+#ifndef FSBL_FASTBOOT_SUPPORT
+	is_hs = 0;
+#else
+	is_hs = 1;
+	// switch emmc to PLL
+	mmio_clrbits_32(0x281021a4, 1 << 8 | 1 << 7);
+#endif
+
+	return ops->set_ios(clk, bus_width, is_hs);
 }
 
 #define MAX_EMMC_INIT_ROUND 2

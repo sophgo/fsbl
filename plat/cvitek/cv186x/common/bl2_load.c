@@ -63,6 +63,8 @@ static union {
 } sram_union_buf __aligned(BLOCK_SIZE);
 
 #define BL2_LOAD_IMAGE_SPLIT	1
+unsigned int is_fip;
+unsigned int is_emmc_init;
 
 void print_sram_log(void)
 {
@@ -93,9 +95,43 @@ void rom_api_redirect(void)
 
 #if BL2_LOAD_IMAGE_SPLIT
 #define ALIGNMENT_THRESHOLD (512 * 1024) // 512KB threshold for alignment
+
+static int emmc_read_fip_bl2(uint32_t offset, uint32_t size, uintptr_t buf)
+{
+	int lba = 0;
+
+	if (((offset & EMMC_BLOCK_MASK) != 0) ||
+	    ((buf & EMMC_BLOCK_MASK) != 0) || ((size & EMMC_BLOCK_MASK) != 0))
+		return -1;
+
+	lba = offset / EMMC_BLOCK_SIZE;
+
+	INFO("%s offset %x,lba %d, size %d, dst buf 0x%lx\n", __func__, offset,
+	     lba, size, buf);
+
+	if (size != emmc_partition_read_blocks(EMMC_PARTITION_BOOT1, lba, buf, size))
+		return -1;
+
+	return 0;
+}
+
+int emmc_load_image_bl2(void *buffer, uint32_t offset, uint32_t size, int retry)
+{
+	int ret = 0;
+
+	if (is_fip) {
+		uint32_t retry_offset = retry * FIP_RETRY_OFFSET + offset;
+
+		ret = emmc_read_fip_bl2(retry_offset, size, (uintptr_t)buffer);
+	} else {
+		ret = emmc_read_blocks(offset / 512, (uintptr_t)buffer, size);
+	}
+	return ret;
+}
 int bl2_load_image_split(void *buf, uint32_t offset, size_t image_size, int retry_num)
 {
 	unsigned int ret;
+	unsigned int boot_src = p_rom_api->get_boot_src();
 	unsigned char *split_start, *split_end;
 	unsigned char *start_addr = buf;
 	unsigned char *end_addr = buf + image_size;
@@ -116,7 +152,11 @@ int bl2_load_image_split(void *buf, uint32_t offset, size_t image_size, int retr
 			split_end = addr + ALIGNMENT_THRESHOLD;
 
 		INFO("Start: %p, End: %p\n", split_start, split_end);
-		ret = p_rom_api->load_image(split_start, offset, split_end - split_start, retry_num);
+		if (boot_src != BOOT_SRC_EMMC)
+			ret = p_rom_api->load_image(split_start, offset, split_end - split_start, retry_num);
+		else
+			ret = emmc_load_image_bl2(split_start, offset, split_end - split_start, retry_num);
+
 		if (ret < 0) {
 			ERROR("fail to load image split: %d.\n", ret);
 			return ret;
@@ -130,8 +170,11 @@ int bl2_load_image_split(void *buf, uint32_t offset, size_t image_size, int retr
 
 int load_param2(int retry)
 {
+#ifndef FSBL_FASTBOOT_SUPPORT
 	uint32_t crc;
+#endif
 	int ret = -1;
+	is_fip = 1;
 
 	NOTICE("P2S/0x%lx/%p.\n", sizeof(fip_param2), &fip_param2);
 #if BL2_LOAD_IMAGE_SPLIT
@@ -148,11 +191,13 @@ int load_param2(int retry)
 		return -1;
 	}
 
+#ifndef FSBL_FASTBOOT_SUPPORT
 	crc = p_rom_api->image_crc(&fip_param2.reserved1, sizeof(fip_param2) - 12);
 	if (crc != fip_param2.param2_cksum) {
 		ERROR("param2_cksum (0x%x/0x%x)\n", crc, fip_param2.param2_cksum);
 		return -1;
 	}
+#endif
 
 	NOTICE("P2E.\n");
 
@@ -164,10 +209,36 @@ int load_ddr_param(int retry)
 	return 0;
 }
 
+void get_adc3(void) {
+	// read adc3 value
+	PINMUX_CONFIG(ADC3, ADC3, G12);         // gpio3_26
+	// mmio_clrbits_32(0x28104c34, 1 << 14);
+	mmio_write_32(ADC_BASE + ADC_CTL, 0x80);
+	mmio_clrsetbits_32(ADC_BASE + ADC_CYC_SET, 0xf000, 0xf << 12);
+	mmio_clrsetbits_32(ADC_BASE + ADC_CYC_SET, 0xf000, 0x2 << 12);
+	mmio_setbits_32(ADC_BASE + ADC_CTL, 0x01);
+	for(int i = 0 ; i < 7 ; i++){
+		// check adc busy
+		mmio_clrbits_32(ADC_BASE + ADC_CTL, 0x01);
+		mmio_setbits_32(ADC_BASE + ADC_CTL, 0x01);
+		while(mmio_read_32(ADC_BASE + ADC_BUSY_STATUS) & 0x1);
+		adc_val_ddr_array[i] = mmio_read_32(ADC_BASE + ADC_RESULT3) & 0xfff;
+		adc_val_ddr_array_sum += adc_val_ddr_array[i];
+		adc_val_ddr_array_min = (adc_val_ddr_array_min < adc_val_ddr_array[i] ? adc_val_ddr_array_min : adc_val_ddr_array[i]);
+		adc_val_ddr_array_max = (adc_val_ddr_array_max > adc_val_ddr_array[i] ? adc_val_ddr_array_max : adc_val_ddr_array[i]);
+	}
+	adc_val_ddr = (adc_val_ddr_array_sum - adc_val_ddr_array_min - adc_val_ddr_array_max)/5;
+	vol_val_ddr = (adc_val_ddr * 1500) / 4096;
+}
+
 int load_ddr(void)
 {
 	int retry = 0;
 
+	if (p_rom_api->get_boot_src() == BOOT_SRC_EMMC && is_emmc_init == 0) {
+		bm_emmc_init(); //reinit eMMC
+		is_emmc_init = 1;
+	}
 retry_from_flash:
 	for (retry = 0; retry < p_rom_api->get_number_of_retries(); retry++) {
 		if (load_param2(retry) < 0)
@@ -196,24 +267,8 @@ retry_from_flash:
 
 	time_records->ddr_init_start = read_time_ms();
 	VERBOSE("\n#ddr_int_start at %d ms#\n", time_records->ddr_init_start);
-	// read adc3 value
-	PINMUX_CONFIG(ADC3, ADC3, G12);         // gpio3_26
-	// mmio_clrbits_32(0x28104c34, 1 << 14);
-	mmio_write_32(ADC_BASE + ADC_CTL, 0x80);
-	mmio_clrsetbits_32(ADC_BASE + ADC_CYC_SET, 0xf000, 0xf << 12);
-	mmio_clrsetbits_32(ADC_BASE + ADC_CYC_SET, 0xf000, 0x2 << 12);
-	mmio_setbits_32(ADC_BASE + ADC_CTL, 0x01);
-	mdelay(10);
-	for(int i = 0 ; i < 7 ; i++){
-		// check adc busy
-		while(mmio_read_32(ADC_BASE + ADC_BUSY_STATUS) & 0x1);
-		adc_val_ddr_array[i] = mmio_read_32(ADC_BASE + ADC_RESULT3) & 0xfff;
-		adc_val_ddr_array_sum += adc_val_ddr_array[i];
-		adc_val_ddr_array_min = (adc_val_ddr_array_min < adc_val_ddr_array[i] ? adc_val_ddr_array_min : adc_val_ddr_array[i]);
-		adc_val_ddr_array_max = (adc_val_ddr_array_max > adc_val_ddr_array[i] ? adc_val_ddr_array_max : adc_val_ddr_array[i]);
-	}
-	adc_val_ddr = (adc_val_ddr_array_sum - adc_val_ddr_array_min - adc_val_ddr_array_max)/5;
-	vol_val_ddr = (adc_val_ddr * 1500) / 4096;
+
+	get_adc3();
 
 #ifndef CONFIG_BOARD_fpga
 #ifdef BL2_ACCESS_BT256MB
@@ -232,8 +287,12 @@ retry_from_flash:
 
 int load_blcp_2nd(int retry)
 {
-	uint32_t crc, rtos_base;
+	uint32_t rtos_base;
+#ifndef FSBL_FASTBOOT_SUPPORT
+	uint32_t crc;
+#endif
 	int ret = -1;
+	is_fip = 0;
 
 	// if no blcp_2nd, release_blcp_2nd should be ddr_init_end
 
@@ -272,11 +331,13 @@ int load_blcp_2nd(int retry)
 		return ret;
 	}
 
+#ifndef FSBL_FASTBOOT_SUPPORT
 	crc = p_rom_api->image_crc((void *)(uintptr_t)fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_size);
 	if (crc != fip_param2.blcp_2nd_cksum) {
 		ERROR("blcp_2nd_cksum (0x%x/0x%x)\n", crc, fip_param2.blcp_2nd_cksum);
 		return -1;
 	}
+#endif
 
 	ret = dec_verify_image((void *)(uintptr_t)fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_size, 0, fip_param1);
 	if (ret < 0) {
@@ -308,8 +369,11 @@ int load_blcp_2nd(int retry)
 
 int load_monitor(int retry, uint64_t *monitor_entry)
 {
+#ifndef FSBL_FASTBOOT_SUPPORT
 	uint32_t crc;
+#endif
 	int ret = -1;
+	is_fip = 1;
 
 	NOTICE("MS/0x%lx/0x%lx/0x%x.\n", fip_param2.monitor_loadaddr, fip_param2.monitor_runaddr,
 	       fip_param2.monitor_size);
@@ -346,11 +410,13 @@ int load_monitor(int retry, uint64_t *monitor_entry)
 		return ret;
 	}
 
+#ifndef FSBL_FASTBOOT_SUPPORT
 	crc = p_rom_api->image_crc((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_size);
 	if (crc != fip_param2.monitor_cksum) {
 		ERROR("monitor_cksum (0x%x/0x%x)\n", crc, fip_param2.monitor_cksum);
 		return -1;
 	}
+#endif
 
 	ret = dec_verify_image((void *)(uintptr_t)fip_param2.monitor_runaddr, fip_param2.monitor_size, 0, fip_param1);
 	if (ret < 0) {
@@ -368,8 +434,11 @@ int load_monitor(int retry, uint64_t *monitor_entry)
 
 int load_bl32(int retry)
 {
+#ifndef FSBL_FASTBOOT_SUPPORT
 	uint32_t crc;
+#endif
 	int ret = -1;
+	is_fip = 1;
 
 	NOTICE("BL32/0x%lx/0x%lx/0x%x.\n", fip_param2.bl32_loadaddr, fip_param2.bl32_runaddr,
 	       fip_param2.bl32_size);
@@ -406,11 +475,13 @@ int load_bl32(int retry)
 		return ret;
 	}
 
+#ifndef FSBL_FASTBOOT_SUPPORT
 	crc = p_rom_api->image_crc((void *)(uintptr_t)fip_param2.bl32_runaddr, fip_param2.bl32_size);
 	if (crc != fip_param2.bl32_cksum) {
 		ERROR("monitor_cksum (0x%x/0x%x)\n", crc, fip_param2.bl32_cksum);
 		return -1;
 	}
+#endif
 
 	ret = dec_verify_image((void *)(uintptr_t)fip_param2.bl32_runaddr, fip_param2.bl32_size, 0, fip_param1);
 	if (ret < 0) {
@@ -426,8 +497,11 @@ int load_bl32(int retry)
 
 int load_blmcu(int retry)
 {
+#ifndef FSBL_FASTBOOT_SUPPORT
 	uint32_t crc;
+#endif
 	int ret = -1;
+	is_fip = 1;
 
 	NOTICE("BLMCU/0x%lx/0x%lx/0x%x.\n", fip_param2.blmcu_loadaddr, fip_param2.blmcu_runaddr,
 	       fip_param2.blmcu_size);
@@ -448,11 +522,13 @@ int load_blmcu(int retry)
 		return ret;
 	}
 
+#ifndef FSBL_FASTBOOT_SUPPORT
 	crc = p_rom_api->image_crc((void *)(uintptr_t)fip_param2.blmcu_runaddr, fip_param2.blmcu_size);
 	if (crc != fip_param2.blmcu_cksum) {
 		ERROR("blmcu_cksum (0x%x/0x%x)\n", crc, fip_param2.blmcu_cksum);
 		return -1;
 	}
+#endif
 
 	ret = dec_verify_image((void *)(uintptr_t)fip_param2.blmcu_runaddr, fip_param2.blmcu_size, 0, fip_param1);
 	if (ret < 0) {
@@ -474,8 +550,11 @@ int load_blmcu(int retry)
 int load_loader_2nd(int retry, uint64_t *loader_2nd_entry)
 {
 	struct loader_2nd_header *loader_2nd_header = &sram_union_buf.loader_2nd_header;
+#ifndef FSBL_FASTBOOT_SUPPORT
 	uint32_t crc;
+#endif
 	int ret = -1;
+	is_fip = 1;
 	const int cksum_offset =
 		offsetof(struct loader_2nd_header, cksum) + sizeof(((struct loader_2nd_header *)0)->cksum);
 
@@ -537,12 +616,13 @@ int load_loader_2nd(int retry, uint64_t *loader_2nd_entry)
 		return ret;
 	}
 
+#ifndef FSBL_FASTBOOT_SUPPORT
 	crc = p_rom_api->image_crc(image_buf + cksum_offset, loader_2nd_header->size - cksum_offset);
 	if (crc != loader_2nd_header->cksum) {
 		ERROR("loader_2nd_cksum (0x%x/0x%x)\n", crc, loader_2nd_header->cksum);
 		return -1;
 	}
-
+#endif
 	ret = dec_verify_image(image_buf + cksum_offset, loader_2nd_header->size - cksum_offset,
 			       sizeof(struct loader_2nd_header) - cksum_offset, fip_param1);
 	if (ret < 0) {
@@ -588,7 +668,6 @@ int load_oem_info(void)
 	uint8_t dram_size_GB = 0;
 
 #if defined(BOOT_FROM_EMMC)
-	static int is_emmc_init;
 	int ret;
 
 	if (is_emmc_init == 0) {

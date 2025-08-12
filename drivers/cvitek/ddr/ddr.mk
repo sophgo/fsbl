@@ -29,6 +29,8 @@ BL2_SOURCES += \
 	drivers/cvitek/ddr/ddr_sys_pld.o \
 	drivers/cvitek/ddr/ddrc_init.o \
 	drivers/cvitek/ddr/phy_init.o \
+	drivers/cvitek/ddr/ddr_resume.o \
+	drivers/cvitek/ddr/ddr_pm.o \
 	drivers/cvitek/ddr/ddr_patch_regs.o
 
 ifneq ($(findstring ddr4, ${DDR_CFG}),)
@@ -52,6 +54,8 @@ BL2_SOURCES += \
         drivers/cvitek/ddr/ddr_shmoo.o \
         drivers/cvitek/ddr/ddrc_init.o \
         drivers/cvitek/ddr/phy_init.o \
+	drivers/cvitek/ddr/ddr_resume.o \
+	drivers/cvitek/ddr/ddr_pm.o \
         drivers/cvitek/ddr/ddr_patch_regs.o
 
 ifneq ($(findstring ddr4_3200_x8, ${DDR_CFG}),)

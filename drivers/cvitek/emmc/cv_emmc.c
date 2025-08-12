@@ -26,7 +26,7 @@
 static void bm_emmc_hw_init(void);
 static void bm_emmc_dev_reset(void);
 static int bm_emmc_send_cmd(emmc_cmd_t *cmd);
-static int bm_emmc_set_ios(int clk, int width);
+static int bm_emmc_set_ios(int clk, int width, int is_hs_mode);
 static int bm_emmc_prepare(int lba, uintptr_t buf, size_t size);
 static int bm_emmc_read(int lba, uintptr_t buf, size_t size);
 static int bm_emmc_write(int lba, uintptr_t buf, size_t size);
@@ -43,14 +43,23 @@ static const emmc_ops_t bm_emmc_ops = {
 
 static bm_emmc_params_t bm_params = {
 	.reg_base = EMMC_BASE,
-	.clk_rate = 50 * 1000 * 1000,
-	.bus_width = EMMC_BUS_WIDTH,
+#ifndef FSBL_FASTBOOT_SUPPORT
+	.clk_rate = 25000000,
+	.bus_width = EMMC_BUS_WIDTH_1,
+#else
+	.clk_rate = 383333334,
+	.bus_width = EMMC_BUS_WIDTH_4,
+#endif
 	.flags = 0
 };
 
 #ifdef SUPPORT_SD_EMMC_CLOCK_ADJUSTMENT
+#ifndef FSBL_FASTBOOT_SUPPORT
 const uint32_t emmc_tran_freq = 12 * 1000 * 1000;
-#endif
+#else
+const uint32_t emmc_tran_freq = 52 * 1000 * 1000;
+#endif // FSBL_FASTBOOT_SUPPORT
+#endif // SUPPORT_SD_EMMC_CLOCK_ADJUSTMENT
 
 static int bm_emmc_send_cmd_with_data(emmc_cmd_t *cmd)
 {
@@ -400,7 +409,7 @@ static void bm_emmc_dev_reset(void)
 	mdelay(1);
 }
 
-static int bm_emmc_set_ios(int clk, int width)
+static int bm_emmc_set_ios(int clk, int width, int is_hs_mode)
 {
 	int ret;
 
@@ -434,6 +443,14 @@ static int bm_emmc_set_ios(int clk, int width)
 		return -EINVAL;
 	}
 
+	if (is_hs_mode) {
+		// set HS mode
+		mmio_write_8(bm_params.reg_base + SDHCI_HOST_CONTROL,
+			     mmio_read_8(bm_params.reg_base + SDHCI_HOST_CONTROL) | BIT(2));
+		// set driver type A
+		mmio_write_16(bm_params.reg_base + SDHCI_HOST_CONTROL2,
+			      mmio_read_16(bm_params.reg_base + SDHCI_HOST_CONTROL2) | BIT(4));
+	}
 	return bm_emmc_set_clk(clk);
 }
 

@@ -81,6 +81,8 @@ extern uintptr_t __RO_END__;
 extern uintptr_t __BL2_END__;
 #elif defined(IMAGE_BL2U)
 extern uintptr_t __BL2U_END__;
+#elif defined(IMAGE_BLDS)
+extern uintptr_t __BLDS_END__;
 #elif defined(IMAGE_BL31)
 extern uintptr_t __BL31_END__;
 #elif defined(IMAGE_BL32)

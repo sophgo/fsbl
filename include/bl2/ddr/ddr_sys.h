@@ -503,6 +503,7 @@ void cvx32_dll_sw_clr(void);
 void ctrl_init_detect_dram_size(uint32_t *cap_in_mbyte);
 void cvx32_change_to_calvl_freq(void);
 void cvx32_ddr_phy_auto_mask(void);
+void cvx32_ddr_resume(void);
 
 void cvx32_calvl_base_loop(uint8_t cslvl_mode, uint8_t vref, uint16_t cur_cs_center_code_cha, uint16_t cur_cs_center_code_chb,
                             uint16_t param_ca_dline_start, uint16_t param_ca_dline_end,

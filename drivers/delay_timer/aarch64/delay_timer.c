@@ -6,7 +6,7 @@
 
 #include <assert.h>
 #include <delay_timer.h>
-#include <platform.h>
+#include <platform_def.h>
 #include <mmio.h>
 
 #define SYS_COUNTER_FREQ_IN_US (SYS_COUNTER_FREQ_IN_SECOND / 1000000)
