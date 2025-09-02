@@ -45,6 +45,7 @@ PLAT_INCLUDES		:=	-Iinclude/plat/arm/common/		\
 				-Iinclude/drivers/emmc		\
 				-Iinclude/drivers/usb		\
 				-Iinclude/drivers/spinor	\
+				-Iinclude/drivers/spi	\
 				-Iinclude/drivers/i2c		\
 				-Iinclude/drivers/ddr		\
 				-Iinclude/drivers/spinand		\

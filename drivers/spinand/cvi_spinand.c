@@ -417,7 +417,7 @@ void cv_spi_nand_set_freq(uint8_t sck_l, uint8_t sck_h, uint16_t prd)
 
 	mmio_write_32(spi_nand_ctrl_base + REG_SPI_NAND_TRX_CTRL1, val);
 
-	NOTICE("NAND:CTRL:0x%x/CTRL1:0x%x\n",
+	VERBOSE("NAND:CTRL:0x%x/CTRL1:0x%x\n",
 			mmio_read_32(spi_nand_ctrl_base + REG_SPI_NAND_BOOT_CTRL),
 			mmio_read_32(spi_nand_ctrl_base + REG_SPI_NAND_TRX_CTRL1));
 }

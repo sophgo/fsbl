@@ -37,7 +37,8 @@ BL2_COMMON_SOURCES = \
 	plat/cvitek/${CHIP_ARCH}/common/cv_bl2_setup.c \
 	plat/cvitek/${CHIP_ARCH}/common/bl2_load.c \
 	drivers/security/security.c \
-	drivers/spinor/cvi_spinor.c \
+	drivers/spi/spi.c \
+	drivers/spinor/cv_dw_spinor.c \
 	drivers/spinand/cvi_spinand.c \
 	drivers/emmc/emmc.c \
 	drivers/emmc/cvi_emmc.c \

@@ -90,8 +90,15 @@ void __system_reset(const char *file, unsigned int line)
 
 void reset_c906l(uintptr_t reset_address)
 {
+#if (defined(CONFIG_SUSPEND) && !defined(CONFIG_DUAL_OS))
+	/*
+	* In the scenario of a single-system suspend/resume operation,
+	* disable the C906L clock to reduce power consumption.
+	*/
+	NOTICE("Disable C906L CLK.\n");
+	mmio_write_32(0x030020e8, mmio_read_32(0x030020e8) & ~BIT(6));
+#else
 	NOTICE("RSC.\n");
-
 	mmio_clrbits_32(0x3003024, 1 << 6);
 
 	mmio_setbits_32(SEC_SYS_BASE + 0x04, 1 << 13);
@@ -99,6 +106,7 @@ void reset_c906l(uintptr_t reset_address)
 	mmio_write_32(SEC_SYS_BASE + 0x24, reset_address >> 32);
 
 	mmio_setbits_32(0x3003024, 1 << 6);
+#endif
 }
 
 void setup_dl_flag(void)
@@ -129,7 +137,6 @@ void config_core_power(uint32_t low_period)
 	 * low_period = 0x24; // 0.90V
 	 * low_period = 0x9; // 1.02V
 	 */
-	mmio_write_32(0x030002d0, mmio_read_32(0x030002d0) | 0x200); //enable pwm
 	mmio_write_32(PINMUX_BASE + 0xec, 0x0); //pinmux for pwm0
 	mmio_write_32(PWM0_BASE + 0x4, 0x64); //period0:100
 	mmio_write_32(PWM0_BASE + 0x174, 0x0); //start_point0:0
@@ -201,6 +208,7 @@ void sys_pll_init_od(void)
 void sys_pll_init(void)
 {
 	NOTICE("PLLS.\n");
+	mmio_write_32(0x030002d0, mmio_read_32(0x030002d0) | 0x200); //enable pwm
 #ifdef OD_CLK_SEL
 	sys_pll_init_od();
 #endif
@@ -304,8 +312,8 @@ void platform_warmentry(void)
 		INFO("WE=0x%lx\n", (uintptr_t)warmboot_entry);
 
 		if (p_rom_api.load_image(&fip_param2,
-		    fip_param1->param2_loadaddr,
-		    PARAM2_SIZE, 0) < 0) {
+			fip_param1->param2_loadaddr,
+			PARAM2_SIZE, 0) < 0) {
 			fip_param2.blcp_2nd_runaddr = 0;
 			ERROR("param2 load fail\n");
 		}
@@ -443,7 +451,7 @@ void set_rtc_en_registers(void)
 	mmio_clrbits_32(REG_RTC_BASE + RTC_EN_PWR_VBAT_DET, BIT(2));
 }
 
-#ifdef RTOS_ENABLE_FREERTOS
+#if defined(RTOS_ENABLE_FREERTOS) || defined(RTOS_ENABLE_RTT)
 void memcpy_u32(void *dst, void *src, int size)
 {
 	int i = 0;
@@ -458,32 +466,34 @@ void memcpy_u32(void *dst, void *src, int size)
 void init_comm_info(void) __attribute((optimize("O0")));
 void init_comm_info(void)
 {
-#ifdef RTOS_ENABLE_FREERTOS
+#if defined(RTOS_ENABLE_FREERTOS) || defined(RTOS_ENABLE_RTT)
 	struct transfer_config_t *transfer_config = (struct transfer_config_t *)MAILBOX_FIELD;
 	struct transfer_config_t transfer_config_s;
-	unsigned char *ptr = (unsigned char *)&transfer_config_s;
-	unsigned short checksum = 0;
+	unsigned char           *ptr      = (unsigned char *)&transfer_config_s;
+	unsigned short           checksum = 0;
 	/* mailbox field is 4 byte write access, and can not access byte by byte.
 	 * so init parameters and copy all to mailbox field together.
 	 */
-	transfer_config_s.conf_magic = RTOS_MAGIC_HEADER;
-	transfer_config_s.conf_size = ((uint64_t)&transfer_config_s.checksum - (uint64_t)&transfer_config_s.conf_magic);
+	transfer_config_s.conf_magic      = RTOS_MAGIC_HEADER;
+	transfer_config_s.conf_size       = ((uint64_t)&transfer_config_s.checksum -
+								   (uint64_t)&transfer_config_s.conf_magic);
 	transfer_config_s.isp_buffer_addr = CVIMMAP_ISP_MEM_BASE_ADDR;
 	transfer_config_s.isp_buffer_size = CVIMMAP_ISP_MEM_BASE_SIZE;
 	transfer_config_s.encode_img_addr = CVIMMAP_H26X_BITSTREAM_ADDR;
 	transfer_config_s.encode_img_size = CVIMMAP_H26X_BITSTREAM_SIZE;
 	transfer_config_s.encode_buf_addr = CVIMMAP_H26X_ENC_BUFF_ADDR;
 	transfer_config_s.encode_buf_size = CVIMMAP_H26X_ENC_BUFF_SIZE;
-	transfer_config_s.dump_print_enable = RTOS_DUMP_PRINT_ENABLE;
+	transfer_config_s.dump_print_enable   = RTOS_DUMP_PRINT_ENABLE;
 	transfer_config_s.dump_print_size_idx = RTOS_DUMP_PRINT_SZ_IDX;
-	transfer_config_s.image_type = RTOS_FAST_IMAGE_TYPE;
-	transfer_config_s.mcu_status = MCU_STATUS_NONOS_DONE;
+	transfer_config_s.image_type          = RTOS_FAST_IMAGE_TYPE;
+	transfer_config_s.mcu_status          = MCU_STATUS_NONOS_DONE;
 	for (int i = 0; i < transfer_config_s.conf_size; i++) {
 		checksum += ptr[i];
 	}
 
 	transfer_config_s.checksum = checksum;
-	memcpy_u32((void *)transfer_config, (void *)&transfer_config_s, sizeof(struct transfer_config_t));
+	memcpy_u32((void *)transfer_config, (void *)&transfer_config_s,
+			   sizeof(struct transfer_config_t));
 #endif
 }
 
@@ -525,7 +535,7 @@ void platform_setup(void)
 	NOTICE("\nFSBL %s:%s\n", version_string, build_message);
 
 	INFO("fip_param1: param_cksum=0x%x param2_loadaddr=0x%x\n",
-	     fip_param1->param_cksum, fip_param1->param2_loadaddr);
+		 fip_param1->param_cksum, fip_param1->param2_loadaddr);
 	//print_sram_log();
 
 	rom_api_redirect();

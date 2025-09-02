@@ -92,5 +92,6 @@ fip-all: fip-dep
 		--BL32='${BL32_PATH}' \
 		--BLMCU='${BLMCU_PATH}' \
 		--LOADER_2ND='${LOADER_2ND_PATH}' \
+		--LOADER_2ND_B='${LOADER_2ND_PATH_B}' \
 		--compress='${FIP_COMPRESS}'
 	${Q}echo "  [LS] " $$(ls -l '${BUILD_PLAT}/fip.bin')

@@ -216,8 +216,13 @@ class FIP:
             Entry.make("LOADER_2ND_LOADADDR", 8, int),
             Entry.make("LOADER_2ND_RESERVED1", 4, int),
             Entry.make("LOADER_2ND_RESERVED2", 8, int),
+            # u-boot_B
+            Entry.make("LOADER_2ND_B_RESERVED0", 4, int),
+            Entry.make("LOADER_2ND_B_LOADADDR", 4, int),
+            Entry.make("LOADER_2ND_B_SIZE", 4, int),
+            Entry.make("LOADER_2ND_B_RESERVED2", 4, int),
             # Reserved
-            Entry.make("RESERVED_LAST", 4096 - (16 + 4*4 + 7*4 + 24*4), bytes),
+            Entry.make("RESERVED_LAST", 4096 - (16 + 4*8 + 7*4 + 24*4), bytes),
         ]
     )
 
@@ -229,6 +234,7 @@ class FIP:
             Entry.make("BL32", None, bytes),
             Entry.make("BLMCU", None, bytes),
             Entry.make("LOADER_2ND", None, bytes),
+            Entry.make("LOADER_2ND_B", None, bytes),
         ]
     )
 
@@ -344,9 +350,9 @@ class FIP:
 
         self.read_fip2(fip_bin)
     def read_fip2(self, fip_bin):
-        logging.debug("read_fip2:")
+        logging.info("read_fip2:")
         param2_loadaddr = self.param1["PARAM2_LOADADDR"].toint()
-        logging.debug(f"param2_loadaddr=0x{param2_loadaddr:x}")
+        logging.info(f"param2_loadaddr=0x{param2_loadaddr:x}")
         fip_bin = bytearray(fip_bin)
         param2_bin = fip_bin[param2_loadaddr : param2_loadaddr + PARAM2_SIZE]
 
@@ -354,10 +360,11 @@ class FIP:
             e.content = param2_bin[e.addr : e.end]
             if hasattr(e, 'name'):
                 if e.name.endswith('_SIZE'):
-                    logging.debug(f"{e.name}=0x{e.toint():x}")
+                    logging.info(f"{e.name}=0x{e.toint():x}")
                 elif e.name.endswith('_LOADADDR'):
-                    logging.debug(f"{e.name}=0x{e.toint():x}")
+                    logging.info(f"{e.name}=0x{e.toint():x}")
                 elif e.name == 'BLCP_2ND_COMP_TYPE':
+                    logging.info(f"BLCP_2ND_COMP_TYPE={e.content}")
                     comp_type = e.content
                     if comp_type == LOADER_2ND_MAGIC_ORIG:
                         logging.debug("BLCP_2ND compression: orig")
@@ -366,10 +373,9 @@ class FIP:
                     elif comp_type == LOADER_2ND_MAGIC_LZ4:
                         logging.debug("BLCP_2ND compression: lz4")
                 elif e.name == 'BLCP_2ND_RUNADDR':
-                    logging.debug(f"BLCP_2ND_RUNADDR=0x{e.toint():x}")
+                    logging.info(f"BLCP_2ND_RUNADDR=0x{e.toint():x}")
                 elif e.name == 'BLCP_2ND_COMP_ADDR':
-                    logging.debug(f"BLCP_2ND_COMP_ADDR=0x{e.toint():x}")
-
+                    logging.info(f"BLCP_2ND_COMP_ADDR=0x{e.toint():x}")
         self.read_end = param2_loadaddr + PARAM2_SIZE
         logging.debug(f"After param2 read_end=0x{self.read_end:x}")
 
@@ -435,6 +441,7 @@ class FIP:
                 logging.error(f"Failed to read LOADER_2ND: {str(e)}")
 
         logging.debug(f"Final read_end=0x{self.read_end:x}")
+        self.rest_fip = fip_bin[self.read_end :]
     
     def read_loader_2nd(self, fip_bin):
         loader_2nd_loadaddr = self.param2["LOADER_2ND_LOADADDR"].toint()
@@ -591,6 +598,13 @@ class FIP:
         self.compress_algo = args.compress
         self.body2["LOADER_2ND"].content = loader_2nd
 
+    def add_loader_2nd_b(self, args):
+        with open(args.LOADER_2ND_B, "rb") as fp:
+            loader_2nd_b = fp.read()
+
+        logging.debug("loader_2nd_b=%#x bytes", len(loader_2nd_b))
+        self.body2["LOADER_2ND_B"].content = loader_2nd_b
+
     def pack_ddr_param(self, fip_bin):
         if not len(self.body2["DDR_PARAM"].content):
             return
@@ -606,21 +620,29 @@ class FIP:
 
         return fip_bin + ddr_param
 
-    def pack_blcp_2nd(self, fip_bin, args=None):
-        logging.debug("pack_blcp_2nd:")
+    def pack_blcp_2nd(self, fip_bin, args=None,sign_flag=False):
+        logging.info("pack_blcp_2nd:")
         if not len(self.body2["BLCP_2ND"].content):
             logging.debug("No BLCP_2ND content")
             return fip_bin
-
+        fip_bin = self.pad(fip_bin, IMAGE_ALIGN)
+        body = self.pad(self.body2["BLCP_2ND"].content, IMAGE_ALIGN)
         try:
             if hasattr(self, 'blcp_2nd_info') and self.blcp_2nd_info:
+                logging.info("Using BLCP_2ND info from original fip")
                 runaddr = self.blcp_2nd_info['runaddr']
+                logging.info(f"blcp_2nd_info: runaddr={runaddr},comp_type={self.blcp_2nd_info['comp_type']},buildin={self.blcp_2nd_info['buildin']}")
                 comp_type = "lzma" if self.blcp_2nd_info['comp_type'] == LOADER_2ND_MAGIC_LZMA else \
                         "lz4" if self.blcp_2nd_info['comp_type'] == LOADER_2ND_MAGIC_LZ4 else "orig"
-                buildin = "y" if self.blcp_2nd_info['buildin'] else "n"
-                logging.debug(f"Using BLCP_2ND info from original fip: comp_type={comp_type}, buildin={buildin}")
+                buildin = "y" if self.blcp_2nd_info['buildin']==True else "n"
                 decompaddr = self.blcp_2nd_info['comp_addr']
+                if sign_flag == True:
+                    if buildin == "n":
+                        return fip_bin
+                    else:
+                        return fip_bin + body
             else:
+                logging.info("Using BLCP_2ND info from args")
                 if args:
                     runaddr = int(args.BLCP_2ND_RUNADDR) if hasattr(args, 'BLCP_2ND_RUNADDR') else 0
                     comp_type = args.BLCP_2ND_COMP_TYPE if hasattr(args, 'BLCP_2ND_COMP_TYPE') else "orig"
@@ -636,16 +658,12 @@ class FIP:
                 self.param2["BLCP_2ND_COMP_TYPE"].content = LOADER_2ND_MAGIC_LZMA
             elif comp_type == "lz4":
                 self.param2["BLCP_2ND_COMP_TYPE"].content = LOADER_2ND_MAGIC_LZ4
-
-            fip_bin = self.pad(fip_bin, IMAGE_ALIGN)
-            body = self.pad(self.body2["BLCP_2ND"].content, IMAGE_ALIGN)
+            
             if not decompaddr:
-                self.param2["BLCP_2ND_COMP_ADDR"].content = int(args.BLCP_2ND_COMP_ADDR)            
+                self.param2["BLCP_2ND_COMP_ADDR"].content = int(args.BLCP_2ND_COMP_ADDR)   
             self.param2["BLCP_2ND_CKSUM"].content = self.image_crc(body)
             self.param2["BLCP_2ND_RUNADDR"].content = runaddr
 
-            logging.debug(f"BLCP_2ND buildin: {buildin}")
-            
             if buildin == "y":
                 self.param2["BLCP_2ND_LOADADDR"].content = len(fip_bin)
                 if self.param2["BLCP_2ND_COMP_TYPE"].content == LOADER_2ND_MAGIC_ORIG:
@@ -815,6 +833,23 @@ class FIP:
         # Append LOADER_2ND to body2
         return fip_bin + self.body2["LOADER_2ND"].content
 
+    def pack_loader_2nd_b(self, fip_bin):
+        logging.debug("pack_loader_2nd_b:")
+        if not len(self.body2["LOADER_2ND_B"].content):
+            return
+
+        fip_bin = self.pad(fip_bin, IMAGE_ALIGN)
+
+        # Append LOADER_2ND_B to body2
+        loader_2nd_b = self.pad(self.body2["LOADER_2ND_B"].content, IMAGE_ALIGN)
+
+        logging.debug("pack_loader_2nd_b:LOADER_2ND_B_LOADADDR=%d, LOADER_2ND_B_SIZE=%d ", len(fip_bin), len(loader_2nd_b))
+
+        self.param2["LOADER_2ND_B_LOADADDR"].content = len(fip_bin)
+        self.param2["LOADER_2ND_B_SIZE"].content = len(loader_2nd_b)
+
+        return fip_bin + loader_2nd_b
+
     def insert_param1(self, fip_bin, name, value):
         fip_bin = bytearray(fip_bin)
         e = self.param1[name]
@@ -822,7 +857,7 @@ class FIP:
         fip_bin[e.addr : e.end] = value
         return self.update_param1_cksum(fip_bin)
 
-    def append_fip2(self, fip1_bin, args):
+    def append_fip2(self, fip1_bin, args,sign_flag=False):
         logging.debug("make_fip2:")
         fip_bin = bytearray(fip1_bin)
 
@@ -838,7 +873,7 @@ class FIP:
         fip_bin = self.pack_ddr_param(fip_bin)
 
         if len(self.body2["BLCP_2ND"].content):
-            tmp = self.pack_blcp_2nd(fip_bin, args)
+            tmp = self.pack_blcp_2nd(fip_bin, args,sign_flag)
             if tmp is not None: 
                 fip_bin = tmp
             else:
@@ -865,8 +900,16 @@ class FIP:
         if len(self.body2["LOADER_2ND"].content):
             fip_bin = self.pack_loader_2nd(fip_bin)
 
+        if len(self.body2["LOADER_2ND_B"].content):
+            fip_bin = self.pack_loader_2nd_b(fip_bin)
+
         # Pack param2_bin
         param2_bin = b"".join((entry.content for entry in self.param2.values()))
+        for name, entry in self.param2.items():
+            if entry.content:
+                logging.info("PARAM2 %s: size=%d bytes, content=%s", 
+                            name, len(entry.content), entry.content[:16].hex())
+
         self.param2["PARAM2_CKSUM"].content = self.image_crc(param2_bin[self.param2["PARAM2_CKSUM"].end :])
         param2_bin = b"".join((entry.content for entry in self.param2.values()))  # update cksum
 
@@ -877,15 +920,46 @@ class FIP:
 
         return fip_bin
 
-    def make(self, args=None):
+    def make(self, args=None,sign_flag=False):
         fip_bin = self.make_fip1()
-        if len(self.body2["DDR_PARAM"].content):
-            fip_bin = self.append_fip2(fip_bin, args)
+        logging.info("=== FIP1 after make_fip1 ===")
+        logging.info("FIP1 size: %d bytes", len(fip_bin))
+        param1_data = fip_bin[:PARAM1_SIZE]
+        logging.info("PARAM1 content: %s", param1_data[:64].hex())
+        body1_start = PARAM1_SIZE
+        content_size=0
+        for name, entry in self.body1.items():
+            if entry.content:
+                content_size = len(entry.content)
+                body_content = fip_bin[body1_start:body1_start + content_size]
+                logging.info("BODY1 %s: offset=%d, size=%d, checksum=%s", 
+                            name, body1_start, content_size,
+                            self.image_crc(body_content).hex())
+            body1_start += content_size
+        
+        fip_bin = self.append_fip2(fip_bin, args,sign_flag)
+        
+        logging.info("=== Final FIP after append_fip2 ===")
+        logging.info("Total FIP size: %d bytes", len(fip_bin))
+        
+        param2_offset = self.param1["PARAM2_LOADADDR"].toint()
+        param2_data = fip_bin[param2_offset:param2_offset + PARAM2_SIZE]
+        logging.info("PARAM2 offset=%d, content=%s", 
+                    param2_offset, param2_data[:64].hex())
+        
+        for name, entry in self.param2.items():
+            if entry.content:
+                logging.info("PARAM2 %s: size=%d bytes, content=%s", 
+                            name, len(entry.content), entry.content[:16].hex())
+        
+        # Append rest_fip if it exists (for signing/encryption mode)
+        if getattr(self, "rest_fip", None) and self.blcp_2nd_info.buildin=="y":
+            logging.info("Appending rest_fip: %#x bytes", len(self.rest_fip))
+            fip_bin += self.rest_fip
+        elif getattr(self, "rest_fip", None):
+            logging.error("the rest of fip is not used: %#x bytes ", len(self.rest_fip))
 
         logging.info("generated fip_bin is %d bytes", len(fip_bin))
-
-        if getattr(self, "rest_fip", None):
-            logging.error("the rest of fip is not used: %#x bytes ", len(self.rest_fip))
 
         return fip_bin
 
@@ -902,6 +976,7 @@ METHODS = {
     "BL32": FIP.add_bl32,
     "BLMCU": FIP.add_blmcu,
     "LOADER_2ND": FIP.add_loader_2nd,
+    "LOADER_2ND_B": FIP.add_loader_2nd_b,
 }
 
 

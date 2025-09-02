@@ -17,7 +17,11 @@ ifeq ($(ARCH),riscv)
 CROSS_COMPILE := ${CROSS_COMPILE_GLIBC_RISCV64}
 BOOT_CPU ?= riscv
 else
+ifneq (${CROSS_COMPILE_64},)
 CROSS_COMPILE := ${CROSS_COMPILE_64}
+else ifneq (${CROSS_COMPILE_GLIBC_ARM64},)
+CROSS_COMPILE := ${CROSS_COMPILE_GLIBC_ARM64}
+endif
 BOOT_CPU := aarch64
 override ARCH := aarch64
 endif
@@ -420,6 +424,12 @@ ifeq ($(OD_CLK_SEL),y)
 $(eval $(call add_define,OD_CLK_SEL))
 endif
 
+ifeq ($(ENABLE_BURN_BUTTON),y)
+$(eval $(call add_define,ENABLE_BURN_BUTTON))
+$(eval $(call add_define_val,GPIO_GRP,${GPIO_GRP}))
+$(eval $(call add_define_val,GPIO_PIN,${GPIO_PIN}))
+endif
+
 ifeq (${RTOS_ENABLE_FREERTOS},y)
 $(eval $(call add_define,RTOS_ENABLE_FREERTOS))
 $(eval $(call add_define_val,RTOS_DUMP_PRINT_SZ_IDX,${RTOS_DUMP_PRINT_SZ_IDX}))
@@ -427,6 +437,20 @@ $(eval $(call add_define_val,RTOS_FAST_IMAGE_TYPE,${RTOS_FAST_IMAGE_TYPE}))
 $(eval $(call add_define_val,RTOS_DUMP_PRINT_ENABLE,$(call yn10,${RTOS_DUMP_PRINT_ENABLE})))
 endif
 
+ifeq (${RTOS_ENABLE_RTT},y)
+$(eval $(call add_define,RTOS_ENABLE_RTT))
+$(eval $(call add_define_val,RTOS_DUMP_PRINT_SZ_IDX,${RTOS_DUMP_PRINT_SZ_IDX}))
+$(eval $(call add_define_val,RTOS_FAST_IMAGE_TYPE,${RTOS_FAST_IMAGE_TYPE}))
+$(eval $(call add_define_val,RTOS_DUMP_PRINT_ENABLE,$(call yn10,${RTOS_DUMP_PRINT_ENABLE})))
+endif
+
+ifeq ($(DUAL_OS), y)
+CFLAGS += -DCONFIG_DUAL_OS
+endif
+
+ifeq ($(SUSPEND), y)
+CFLAGS += -DCONFIG_SUSPEND
+endif
 ################################################################################
 # Build targets
 ################################################################################
