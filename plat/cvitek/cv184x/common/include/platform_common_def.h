@@ -740,6 +740,7 @@ extern struct _time_records *time_records;
  */
 #define PLAT_BOOT_UART_BASE		UART0_BASE
 #define PLAT_CRASH_UART_BASE		UART0_BASE
+#define PLAT_UART0_RESET_BIT		(0x1 << 27)
 
 /*
  * TOP registers.

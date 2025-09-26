@@ -161,7 +161,8 @@ void sys_pll_init_od(void)
 	config_core_power(0x9);
 	//1.switch pll to xtal(bypass mode)
 	mmio_write_32(REG_CLK_BYP_H104, 0xFFFFFFFF);
-	mmio_write_32(REG_CLK_BYP_H108, 0xFFFFFFFF);
+	// clk_uart0 stay in pll mode to keep console working
+	mmio_write_32(REG_CLK_BYP_H108, 0xFFF7FFFF);
 	mmio_write_32(REG_CLK_BYP_H10C, 0xFFFFFFFF);
 
 	//2.set tpll/appll/rvpll *_pll_csr to OD mode
@@ -228,15 +229,19 @@ void sys_pll_init(void)
 	mmio_write_32(REG_DISPPLL_SSC_SYN_CTRL, TOGGLE_SSC_SYN_SW_UP);
 
 	udelay(10);
+	console_flush();
+	console_uninit();
 
 	// bypass
 	mmio_write_32(REG_CLK_BYP_H104, 0);
 	mmio_clrbits_32(REG_CLK_BYP_H108,
-		~(0x1 << 19 | 0x1 << 3 | 0x1 << 4)); //bit 19(reg_hsperi_clk_uart0_byp & sd0_byp)
+		~(0x1 << 3 | 0x1 << 4)); //bit 3 & 4 (sd0_byp)
+	// set clk_uart0_byp to xtal(bypass mode 25MHz)
+	mmio_setbits_32(REG_CLK_BYP_H108, (1 << 19));
 	mmio_write_32(REG_CLK_BYP_H10C, 0);
 
 	//reinit console
-	//console_init(0, PLAT_UART_CLK_PLL_HZ, PLAT_CONSOLE_BAUDRATE);
+	console_init(UART0_BASE, PLAT_UART_CLK_IN_HZ, PLAT_CONSOLE_BAUDRATE);
 	NOTICE("PLLE.\n");
 }
 

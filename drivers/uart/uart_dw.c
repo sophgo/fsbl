@@ -2,6 +2,7 @@
 #include <utils_def.h>
 #include <stddef.h>
 #include "platform_def.h"
+#include "mmio.h"
 
 #define thr rbr
 #define iir fcr
@@ -39,6 +40,8 @@ struct dw_regs {
 #define UART_LSR_DR	    0x01 /* Receiver data ready */
 #define UART_LSR_TEMT   0x40        /* Xmitter empty */
 
+#define UART_USR_OFFSET		0x7c
+
 #define UART_FCR_FIFO_EN    0x01 /* Fifo enable */
 #define UART_FCR_RXSR       0x02 /* Receiver soft reset */
 #define UART_FCR_TXSR       0x04 /* Transmitter soft reset */
@@ -49,6 +52,12 @@ struct dw_regs {
 
 static struct dw_regs *uart = (struct dw_regs *)PLAT_BOOT_UART_BASE;
 
+void console_reset(void)
+{
+	mmio_clrbits_32(RST_BASE, PLAT_UART0_RESET_BIT);
+	mmio_setbits_32(RST_BASE, PLAT_UART0_RESET_BIT);
+}
+
 void console_init(uintptr_t uart_base, unsigned int uart_clk, unsigned int baud_rate)
 {
 	int baudrate = baud_rate;
@@ -56,6 +65,17 @@ void console_init(uintptr_t uart_base, unsigned int uart_clk, unsigned int baud_
 
 	// int divisor = uart_clock / (16 * baudrate);
 	int divisor = DIV_ROUND_CLOSEST(uart_clock, 16 * baudrate);
+	const int timeout_max = 1000;
+	int i;
+	/* wait uart idle before changing registers */
+	for (i = 0; i < timeout_max; ++i) {
+		if (!(*(volatile uint32_t *)(uart_base + UART_USR_OFFSET) & 0x01)) {
+			break;
+		}
+	}
+	if (i >= timeout_max) {
+		console_reset();
+	}
 
 	uart = (struct dw_regs *)uart_base;
 

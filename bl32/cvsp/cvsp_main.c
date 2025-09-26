@@ -266,7 +266,7 @@ bmsp_args_t *bmsp_cpu_resume_main(uint64_t max_off_pwrlvl, uint64_t arg1,
 	spin_lock(&console_lock);
 	INFO("BMSP: cpu 0x%lx resumed. maximum off power level %ld\n",
 	     read_mpidr(), max_off_pwrlvl);
-	INFO("BMSP: cpu 0x%lx: %d smcs, %d erets %d cpu suspend requests\n",
+	INFO("BMSP: cpu 0x%lx: %d smcs, %d erets %d cpu resume requests\n",
 	     read_mpidr(), bmsp_stats[linear_id].smc_count,
 	     bmsp_stats[linear_id].eret_count,
 	     bmsp_stats[linear_id].cpu_suspend_count);

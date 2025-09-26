@@ -447,6 +447,6 @@ extern void cv_spi_nand_g_param_init(void);
 void spi_nand_downgrade_read_mode(void);
 void spi_nand_downgrade_freq(void);
 int get_nand_info(void);
-int cv_spi_nand_read_data(void * buffer, uint32_t offset, uint32_t size);
+int cv_spi_nand_read_skip_bad(void *buffer, uint32_t offset, uint32_t size);
 void cv_spi_nand_set_freq(uint8_t sck_l, uint8_t sck_h, uint16_t prd);
 #endif	/* __CV_SPI_NAND_H__ */

@@ -347,7 +347,7 @@ int get_nand_info(void)
 
 		ret = cv_spi_nand_read_page_by_row_addr(0, page_buff + 2048, 2048);
 		if (ret)
-			ERROR("Scan fip_header fialed!\n");
+			ERROR("Scan fip_header failed!\n");
 
 		if (memcmp(page_buff, page_buff + 2048, 2048))
 			spinand_info.flags &= ~(FLAGS_ENABLE_X4_BIT | FLAGS_ENABLE_X2_BIT);
@@ -377,9 +377,74 @@ uint32_t cv_spi_nand_read_page_by_row_addr(uint32_t row_addr, void *buf, uint32_
         return spi_nand_parsing_ecc_info(row_addr);
 }
 
-int cv_spi_nand_read_data(void * buffer, uint32_t offset, uint32_t size)
+uint32_t cv_spi_nand_read_oob(uint32_t row_addr, void *buf)
 {
-	uint32_t i;
+	uint32_t col_addr = spinand_info.page_size;
+	uint32_t blk_id = row_addr >> spinand_info.pages_per_block_shift;
+
+	spi_nand_ctrl_ecc(0);
+
+	spi_nand_read_page_by_row_addr(row_addr, buf, spinand_info.spare_size);
+
+	if ((spinand_info.flags & FLAGS_SET_PLANE_BIT) && (blk_id % 2 == 1))
+		col_addr |= SPI_NAND_PLANE_BIT_OFFSET;
+
+	flush_dcache_range((uintptr_t)buf, spinand_info.spare_size);
+	spi_nand_read_from_cache(0, 0, col_addr, spinand_info.spare_size, buf);
+	spi_nand_ctrl_ecc(1);
+
+	return 0;
+}
+
+static int nand_block_isbad(uint32_t offset)
+{
+	uint32_t read_page = offset / spinand_info.page_size;
+	uint8_t oob_buff[256] = {0};
+
+	switch (spinand_info.badblock_pos) {
+	case BBP_LAST_PAGE:
+		cv_spi_nand_read_oob(read_page + (spinand_info.pages_per_block - 1), oob_buff);
+		// Check bad block if 1st byte of last page is non-0xFF
+		if (*(uint8_t *)oob_buff != 0xFF) {
+			INFO("Found bad block %x with spare data 0x%x\n",
+				offset, *(uint8_t *)oob_buff);
+			return -1;
+		}
+		break;
+	case BBP_FIRST_2_PAGE:
+		cv_spi_nand_read_oob(read_page + (spinand_info.pages_per_block - 1), oob_buff);
+		// Check bad block if 1st byte of 1st page is non-0xFF
+		if (*(uint8_t *)oob_buff != 0xFF) {
+			INFO("Found bad block %x with spare data 0x%x\n",
+				offset, *(uint8_t *)oob_buff);
+			return -1;
+		}
+
+		cv_spi_nand_read_oob(read_page + 1, oob_buff);
+		// Check bad block if 1st byte of 2nd page is non-0xFF
+		if (*(uint8_t *)oob_buff != 0xFF) {
+			INFO("Found bad block %x with spare data 0x%x\n",
+				offset, *(uint8_t *)oob_buff);
+			return -1;
+		}
+		break;
+	case BBP_FIRST_PAGE:
+	default:
+		cv_spi_nand_read_oob(read_page, oob_buff);
+		// Check bad block if 1st byte of first page is non-0xFF
+		if (*(uint8_t *)oob_buff != 0xFF) {
+			INFO("Found bad block %x with spare data 0x%x\n",
+				offset, *(uint8_t *)oob_buff);
+			return -1;
+		}
+		break;
+	}
+	return 0;
+}
+
+int cv_spi_nand_read_data(void **buffer, uint32_t offset, uint32_t size)
+{
+	uint32_t i, length = size;
 	offset = offset / spinand_info.page_size;
 	int ret = 0;
 
@@ -387,15 +452,56 @@ int cv_spi_nand_read_data(void * buffer, uint32_t offset, uint32_t size)
 		size = (size + spinand_info.page_size - 1) &~(spinand_info.page_size - 1);
 	}
 
+	//Note: writing to the buffer here will go out of bounds.
 	for (i = 0; i < size / spinand_info.page_size; i++) {
-		ret = (int)cv_spi_nand_read_page_by_row_addr(offset, buffer, spinand_info.page_size);
+		ret = (int)cv_spi_nand_read_page_by_row_addr(offset, *buffer, spinand_info.page_size);
 		if (ret) {
 			ERROR("read page %u failed\n", offset);
 			return ret;
 		}
 		offset++;
-		buffer += spinand_info.page_size;
+		if (length < spinand_info.page_size)
+			*buffer += length;
+		else
+			*buffer += spinand_info.page_size;
+		length -= spinand_info.page_size;
 	}
+	return ret;
+}
+
+int cv_spi_nand_read_skip_bad(void *buffer, uint32_t offset, uint32_t size)
+{
+	int ret;
+	uint32_t left_to_read = size;
+	void *read_buf = buffer;
+
+	while (left_to_read > 0) {
+		size_t block_offset = offset & (spinand_info.block_size - 1);
+		size_t read_length;
+
+		if (nand_block_isbad(offset & ~(spinand_info.block_size - 1))) {
+			NOTICE("Skipping bad block 0x%x\n",
+				offset & ~(spinand_info.block_size - 1));
+			offset += spinand_info.block_size - block_offset;
+			continue;
+		}
+
+		if (left_to_read < (spinand_info.block_size - block_offset))
+			read_length = left_to_read;
+		else
+			read_length = spinand_info.block_size - block_offset;
+
+		ret = cv_spi_nand_read_data(&read_buf, offset, read_length);
+
+		if (ret) {
+			printf("NAND read from offset %x failed %d\n", offset, ret);
+			return ret;
+		}
+
+		left_to_read -= read_length;
+		offset       += read_length;
+	}
+
 	return ret;
 }
 

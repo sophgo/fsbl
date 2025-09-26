@@ -142,12 +142,12 @@ static int emmc_read_fip_bl2(uint32_t offset, uint32_t size, uintptr_t buf)
 }
 
 int load_data_from_storage(void *buffer, uint32_t offset, uint32_t size,
-			   int retry, u_int8_t is_eMMC_boot_partition)
+			   int retry, u_int8_t is_read_fip_partition)
 {
 	int ret = 0;
 
 	if (p_rom_api.get_boot_src() == BOOT_SRC_EMMC) {
-		if (is_eMMC_boot_partition) {
+		if (is_read_fip_partition) {
 			uint32_t retry_offset =
 				retry * FIP_RETRY_OFFSET + offset;
 
@@ -158,6 +158,13 @@ int load_data_from_storage(void *buffer, uint32_t offset, uint32_t size,
 		}
 	} else if (p_rom_api.get_boot_src() == BOOT_SRC_SPI_NOR) {
 		cv_dw_spinor_read(buffer, offset, size);
+	} else if (p_rom_api.get_boot_src() == BOOT_SRC_SPI_NAND && (!is_read_fip_partition)) {
+		static int count;
+
+		if (!count)
+			get_nand_info();
+		count++;
+		ret = cv_spi_nand_read_skip_bad(buffer, offset, size);
 	} else {
 		ret = p_rom_api.load_image(buffer, offset, size, retry);
 	}
@@ -322,26 +329,17 @@ int load_user_param_and_logo(int retry)
 #ifdef LOGO_OFFSET
 	int ret = -1;
 	void *image_buf = NULL;
-	u_int8_t is_emmc_boot_partition = 1;
+	u_int8_t is_read_fip_partition = 1;
 
 	image_buf  = (void *)(uintptr_t)CVIMMAP_RTOS_LOGO_ADDR;
 
 	NOTICE("LOGO:0x%x/0x%d/0x%p\n", LOGO_OFFSET, LOGO_SIZE, image_buf);
-	if (p_rom_api.get_boot_src() == BOOT_SRC_EMMC)
-		is_emmc_boot_partition = 0;
+	if (p_rom_api.get_boot_src() == BOOT_SRC_EMMC || p_rom_api.get_boot_src() == BOOT_SRC_SPI_NAND)
+		is_read_fip_partition = 0;
 
 	// load blcp 2nd image from flash to run comp address, and speed up freqency
-	if (p_rom_api.get_boot_src() == BOOT_SRC_SPI_NAND) {
-		static int count = 0;
-		if (!count)
-			get_nand_info();
-
-		count++;
-		ret = cv_spi_nand_read_data(image_buf, LOGO_OFFSET, LOGO_SIZE);
-	} else {
-		ret = load_data_from_storage(image_buf, LOGO_OFFSET, LOGO_SIZE, retry,
-									 is_emmc_boot_partition);
-	}
+	ret = load_data_from_storage(image_buf, LOGO_OFFSET, LOGO_SIZE, retry,
+									is_read_fip_partition);
 
 	if (ret < 0) {
 		ERROR("load data failed! loadaddr:0x%x, size:%d, retry:%d\n",
@@ -362,10 +360,7 @@ int load_blcp_2nd(int retry)
 	void *image_buf = NULL;
 	uint32_t image_size = 0;
 
-	u_int8_t is_emmc_boot_partition = 1;
-
-	u_int8_t is_buildin = 0;
-
+	u_int8_t is_read_fip_partition = 1;
 	// if no blcp_2nd, set release_blcp_2nd previou and change it end of function.
 	time_records->release_blcp_2nd = read_time_ms();
 
@@ -386,28 +381,19 @@ int load_blcp_2nd(int retry)
 
 	// fip_param2.blcp_2nd_loadaddr == 0, means didn't build in fip.bin.
 	if (!fip_param2.blcp_2nd_loadaddr) {
-		is_buildin = 1;
 		#ifdef SECOND_OFFSET
 		//reset the loadaddr to SECOND_OFFSET from xmp partitions.
 		fip_param2.blcp_2nd_loadaddr = SECOND_OFFSET;
 		#endif
-		if (p_rom_api.get_boot_src() == BOOT_SRC_EMMC)
-			is_emmc_boot_partition = 0;
+		if (p_rom_api.get_boot_src() == BOOT_SRC_EMMC || p_rom_api.get_boot_src() == BOOT_SRC_SPI_NAND)
+			is_read_fip_partition = 0;
 	}
 
 	// load blcp 2nd image from flash to run comp address, and speed up freqency
-	if ((p_rom_api.get_boot_src() == BOOT_SRC_SPI_NAND) && (is_buildin)) {
-		static int count = 0;
-		if (!count)
-			get_nand_info();
 
-		count++;
-		ret = cv_spi_nand_read_data(image_buf, fip_param2.blcp_2nd_loadaddr, image_size);
-	} else {
-		ret = load_data_from_storage(image_buf,
+	ret = load_data_from_storage(image_buf,
 			fip_param2.blcp_2nd_loadaddr,
-			image_size, retry, is_emmc_boot_partition);
-	}
+			image_size, retry, is_read_fip_partition);
 
 	if (ret < 0) {
 		ERROR("load data failed! loadaddr:0x%x, size:%d, retry:%d\n",

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import logging
 import struct
 import argparse
@@ -25,6 +26,7 @@ def gen_chip_conf(args):
     chip_conf = b"".join(struct.pack("<II", a, v) for a, v in regs)
     logging.info("chip_conf=%d bytes", len(chip_conf))
 
+    os.makedirs(os.path.dirname(args.CHIP_CONF), exist_ok=True)
     with open(args.CHIP_CONF, "wb") as fp:
         fp.write(chip_conf)
 
