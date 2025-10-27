@@ -368,7 +368,13 @@ extern struct _time_records *time_records;
  * RTC
  */
 #define RTC_AHBSRAM_BASE	0x05200000
-#define PM_NON_PRIMARY_CPU_HOLD	(RTC_AHBSRAM_BASE + 0x6700)
+#define PM_NON_PRIMARY_CPU_HOLD	(RTC_AHBSRAM_BASE + 0x6200)
+#define PM_SRAM_FLAG_ADDR	0x052062f0
+#define PM_SRAM_DDR_INFO	0x052062f8
+#define PM_SRAM_BASE		0x25020000 //(RTC_AHBSRAM_BASE + 0x6300)
+#define PM_SRAM_DDR_REGS	(0xC80)
+#define PM_SRAM_TOTAL_SIZE	(0x1780)
+#define PM_SRAM_TEXT_SIZE	(PM_SRAM_TOTAL_SIZE - PM_SRAM_DDR_REGS)
 
 #define RTC_SYS_BASE 0x05000000
 #define RTC_MACRO_BASE (RTC_SYS_BASE + 0x00026400)
@@ -412,6 +418,11 @@ extern struct _time_records *time_records;
 
 #define RTC_INTERNAL_32K 0
 #define RTC_EXTERNAL_32K 1
+
+/* FSM state change to ST_ON from the state */
+#define ST_ON_FROM_OFF   0x0  //st_off to st_on
+#define ST_ON_FROM_RESET 0x3  //st_pwr_cyc or st_warm_reset then back to st_on
+#define ST_ON_FROM_SUSP  0x9  //st_susp to st_on
 
 /*
  * AXI SRAM

@@ -3,4 +3,6 @@
 
 int mem_test(unsigned long addr, unsigned long size, unsigned long iter);
 
+void cvx32_ddr_resume(void);
+
 #endif

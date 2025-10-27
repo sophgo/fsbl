@@ -16,6 +16,8 @@ void bl2_main(void)
 
 	platform_setup();
 
+	platform_warmentry();
+
 	load_ddr();
 
 	load_rest();
@@ -24,4 +26,8 @@ void bl2_main(void)
 
 	while (1)
 		;
+}
+
+void __attribute__((weak)) platform_warmentry(void)
+{
 }

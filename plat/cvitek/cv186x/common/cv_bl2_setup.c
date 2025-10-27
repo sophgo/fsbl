@@ -11,6 +11,7 @@
 #include <rom_api.h>
 
 #include "ddr_pkg_info.h"
+#include "ddr_sys.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
@@ -163,6 +164,7 @@ void sys_pll_init(void)
 	mmio_setbits_32(0x28102460, 0x1);
 	//disppll1 sw update
 	mmio_setbits_32(0x28102560, 0x1);
+	mmio_write_32(0x28102764, 0x3A980000); //set a0pll to 491.52MHz
 	//a0pll sw update
 	mmio_setbits_32(0x28102760, 0x1);
 
@@ -262,11 +264,18 @@ void set_rtc_en_registers(void)
 {
 	uint32_t write_data;
 	uint32_t read_data;
+	uint32_t fsm_state;
 
 	read_data = mmio_read_32(REG_RTC_BASE + RTC_ST_ON_REASON);
 	NOTICE("st_on_reason=%x\n", read_data);
+
+	fsm_state = read_data & 0xF;
+
 	read_data = mmio_read_32(REG_RTC_BASE + RTC_ST_OFF_REASON);
 	NOTICE("st_off_reason=%x\n", read_data);
+
+	if (fsm_state == ST_ON_FROM_SUSP)
+		return;
 
 	mmio_write_32(REG_RTC_BASE + RTC_EN_SHDN_REQ, 0x01);
 	while (mmio_read_32(REG_RTC_BASE + RTC_EN_SHDN_REQ) != 0x01)
@@ -386,8 +395,79 @@ void vddc_pwm_init(void)
         mmio_clrsetbits_32(PWM2_BASE + PWM_OE, 0xF, 0x1);
 }
 
+static void *get_warmboot_entry(void)
+{
+#define WANTED_STATE ST_ON_FROM_SUSP
+	NOTICE("\nRTC_ST_ON_REASON 0x%x\n", mmio_read_32(REG_RTC_ST_ON_REASON));
+	NOTICE("\nSRAM_FLAG_ADDR 0x%lx\n", mmio_read_64(PM_SRAM_FLAG_ADDR));
+	if((mmio_read_32(REG_RTC_ST_ON_REASON) & 0xF) == WANTED_STATE)
+		return (void *)(intptr_t)mmio_read_64(PM_SRAM_FLAG_ADDR);
+
+	return 0;
+}
+
+static void ddr_resume(void)
+{
+	cvx32_ddr_resume();
+}
+
+extern void get_adc3(void);
+
+void platform_warmentry(void)
+{
+	void (*warmboot_entry)(void) = get_warmboot_entry();
+
+	mmio_write_64(PM_SRAM_FLAG_ADDR, 0);
+	if (warmboot_entry) {
+
+		//enable WDG_RTS_REQ when resume
+		mmio_write_32(REG_RTC_CTRL_BASE + RTC_CTRL0, 0x200000);
+		mmio_write_32(REG_RTC_BASE + RTC_EN_WDT_RST_REQ, 0x1);
+
+		get_adc3();
+
+		sys_pll_init();
+
+		NOTICE("WE=0x%lx\n", (uintptr_t)warmboot_entry);
+
+		ddr_resume();
+		NOTICE("ddr resumed\n");
+
+		sys_switch_all_to_pll();
+
+		console_flush();
+
+#ifdef AARCH64
+		disable_mmu_icache_el3();
+		__asm__ volatile("tlbi alle3\n");
+#endif
+
+		warmboot_entry();
+	}
+}
+
+/**
+ * @brief Built-In Self-Repair RESET
+ *
+ */
+void reset_rtc_bisr(void)
+{
+	// NOTICE("%s\n", __func__);
+	// All the RAM on the chip is bisr in the rom code, which is reset here
+	// bisr_pdgroup_en0 1 2 3 reset 0
+	mmio_write_32(0x050250dc, 0x0);
+	mmio_write_32(0x050250e0, 0x0);
+	mmio_write_32(0x050250e4, 0x0);
+	mmio_write_32(0x050250e8, 0x0);
+	// bisr_repair_en reset 0
+	mmio_write_32(0x050250d8, 0x0);
+}
+
 void platform_setup(void)
 {
+	// reset rtc bisr which occurs in rom
+	reset_rtc_bisr();
+
 	time_records->bl2_start = read_time_ms();
 	VERBOSE("\n#bl2 start at: %d ms#\n", time_records->bl2_start);
 	// set emmc, sd0 bypass
@@ -409,8 +489,9 @@ void platform_setup(void)
 	     fip_param1->param_cksum, fip_param1->param2_loadaddr);
 
 	INFO("CP_STATE_REG=0x%x\n", mmio_read_32(0x25047018));
-
+#ifndef FSBL_FASTBOOT_SUPPORT
 	print_sram_log();
+#endif
 
 	rom_api_redirect();
 

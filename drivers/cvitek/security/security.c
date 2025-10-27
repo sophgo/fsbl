@@ -23,7 +23,7 @@ static uint8_t current_digest[SHA256_SIZE];
 
 int cryptodma_aes_decrypt(const void *plain, const void *encrypted, uint64_t len, uint8_t *key, uint8_t *iv)
 {
-	__aligned(32) uint32_t dma_descriptor[22] = { 0 };
+	static __aligned(32) uint32_t dma_descriptor[22] = { 0 };
 
 	uint32_t status;
 	uint32_t ts;

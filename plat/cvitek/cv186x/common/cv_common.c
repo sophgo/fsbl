@@ -164,12 +164,11 @@ int plat_cryptodma_exec(uintptr_t src, uintptr_t dst, uint64_t len, spacc_exec_c
 	__attribute__((aligned(64))) uint32_t dma_descriptor[32] = { 0 };
 
 	uint32_t status;
-	u32 ts = 0;
 	INFO("AES/0x%lx/0x%lx/0x%lx\n", src, dst, len);
 	
 	// Prepare descriptor
 	dma_descriptor[CRYPTODMA_CTRL] =  DES_USE_DESCRIPTOR_IV | DES_USE_AES | 0xF|IV_OUT0_SELECT;
-	if(config->otp==USE_OTP_KEY){
+	if(config->otp==CRYPTODMA_KEY_SOURCE_OTP){
 		dma_descriptor[CRYPTODMA_CTRL] |= OTP_KEY_SEL;
 	}else{
 		dma_descriptor[CRYPTODMA_CTRL] |= DES_USE_DESCRIPTOR_KEY;
@@ -188,25 +187,25 @@ int plat_cryptodma_exec(uintptr_t src, uintptr_t dst, uint64_t len, spacc_exec_c
 		}
 	}
 	dma_descriptor[CRYPTODMA_CIPHER]|=config->key_mode<<3;
-	NOTICE("CONFIG->KEY_MODE:%d\n",config->key_mode);
-	NOTICE("CONFIG->MODE:%d\n",config->mode);
+	INFO("CONFIG->KEY_MODE:%d\n",config->key_mode);
+	INFO("CONFIG->MODE:%d\n",config->mode);
 	switch(config->mode){
 		case AES_ECB:
 			break;
 		case AES_CBC:
 			dma_descriptor[CRYPTODMA_CIPHER] |= CBC_ENABLE << 1;
+			memcpy(&dma_descriptor[CRYPTODMA_IV], (const void *)config->iv, 16);
 			break;
 		case AES_CTR:
 			dma_descriptor[CRYPTODMA_CIPHER] |= 0x1 << 2;
+			memcpy(&dma_descriptor[CRYPTODMA_IV], (const void *)config->iv, 16);
 			break;
 		default:
 			break;
 	}
-	memcpy(&dma_descriptor[CRYPTODMA_IV], (const void *)config->iv, 16);
 	if (config->action == ENCRYPTION) {
 		dma_descriptor[CRYPTODMA_CIPHER] |= 1;
 	} 
-
 	dma_descriptor[CRYPTODMA_SRC_ADDR_L] = (uint32_t)(src & 0xFFFFFFFF);
 	dma_descriptor[CRYPTODMA_SRC_ADDR_H] = (uint32_t)(src >> 32);
 
@@ -228,35 +227,36 @@ int plat_cryptodma_exec(uintptr_t src, uintptr_t dst, uint64_t len, spacc_exec_c
 	flush_dcache_range((unsigned long)dma_descriptor,
 			   sizeof(dma_descriptor));
 	flush_dcache_range((uintptr_t)src, len);
-	flush_dcache_range((uintptr_t)dst, len);
 	// Clear interrupt
 	mmio_write_32(SEC_CRYPTODMA_BASE + CRYPTODMA_WR_INT, 0x3);
 	// Trigger cryptodma engine
 	mmio_write_32(SEC_CRYPTODMA_BASE + CRYPTODMA_DMA_CTRL,
 		      DMA_WRITE_MAX_BURST << 24 | DMA_READ_MAX_BURST << 16 |
 			      DMA_DESCRIPTOR_MODE << 1 | DMA_ENABLE);
-	NOTICE("dma_descriptor[CRYPTODMA_CTRL]:%x\n",
+	INFO("dma_descriptor[CRYPTODMA_CTRL]:%x\n",
 	       dma_descriptor[CRYPTODMA_CTRL]);
-	NOTICE("dma_descriptor[CRYPTODMA_CIPHER]:%x\n",
+	INFO("dma_descriptor[CRYPTODMA_CIPHER]:%x\n",
 	       dma_descriptor[CRYPTODMA_CIPHER]);
-	NOTICE("SEC_CRYPTODMA_BASE[%x]:%x\n", SEC_CRYPTODMA_BASE + 0x14,
+	INFO("SEC_CRYPTODMA_BASE[%x]:%x\n", SEC_CRYPTODMA_BASE + 0x14,
 	       mmio_read_32(SEC_CRYPTODMA_BASE + 0x14));
-	NOTICE("SEC_CRYPTODMA_BASE[CTRL]%x:%x\n",
+	INFO("SEC_CRYPTODMA_BASE[CTRL]%x:%x\n",
 	       SEC_CRYPTODMA_BASE + CRYPTODMA_DMA_CTRL,
 	       mmio_read_32(SEC_CRYPTODMA_BASE + CRYPTODMA_DMA_CTRL));
-
+	u32 ts=get_timer(0);
 	do {
 		status = mmio_read_32(SEC_CRYPTODMA_BASE + CRYPTODMA_WR_INT);
 		INFO("INT status 0x%x\n", status);
-		if (get_timer(ts) >= 300000) {
+		if (get_timer(ts) >= 3000) {
 			ERROR("exec timeout\n");
 			return -1;
 		}
 	} while (status == 0);
-
-	
-
-	return 0;
+#ifdef DEBUG
+	uint32_t elapsed_time = get_timer(start);
+	float transfer_rate = (float)len / (elapsed_time / 1000.0);
+	INFO("Data length: %lu B, Time elapsed: %u ms, Transfer rate: %.2f B/s\n", len, elapsed_time, transfer_rate);
+#endif
+	return len;
 }
 
 static inline void setup_src(u32 *dma_descriptor, uintptr_t src, u32 len)
@@ -338,7 +338,252 @@ int plat_cryptodma_base64(uintptr_t src, uint64_t len, uintptr_t dst, uint32_t c
 
 	return result_len;
 }
+int plat_cryptodma_do(int isEncrypt, uintptr_t in, uintptr_t out, uint64_t len,
+              unsigned char *key, E_KEY_MODE keyMode, unsigned char *iv,
+              E_ALGO a, E_MODE b, uint32_t *state,CRYPTODMA_KEY_SOURCE_E otp)
+{
+    uint32_t data;
+    int i;
+    uint32_t des_ctrl = 0;
+    __attribute__((aligned(64))) uint32_t dma_descriptor[32] = { 0 };
+    uint64_t src = (uintptr_t)in;
+    uint64_t des = (uintptr_t)out;
+	NOTICE("%s(): src=%p, len=%lu, out=%p, key=%p, iv=%p E_ALGO=%d, E_MODE=%d,KEY_MODE=%d,isEncrypt=%d,otp=%d\n",
+	       __func__, (void *)src, len, (void *)des, (void *)key, (void *)iv, a, b, keyMode, isEncrypt,otp);		   
+    if (!in || !out || !len) {
+		NOTICE("in or out or len is null\n");
+        return -1;
+    }
 
+    des_ctrl = 0xF;  
+
+    switch (a) {
+    case AES:
+        des_ctrl |= DES_USE_DESCRIPTOR_IV | DES_USE_AES |IV_OUT0_SELECT;
+		if(otp==CRYPTODMA_KEY_SOURCE_OTP){
+			des_ctrl |= OTP_KEY_SEL;
+		}else{
+			des_ctrl |= DES_USE_DESCRIPTOR_KEY;
+		}
+        dma_descriptor[CRYPTODMA_CTRL] = des_ctrl;
+        switch (b) {
+        case ECB:
+            break;
+        case CBC:
+            dma_descriptor[CRYPTODMA_CIPHER] = CBC_ENABLE << 1;
+            break;
+        case CTR:
+            dma_descriptor[CRYPTODMA_CIPHER] = 0x1 << 2;
+            break;
+        default:
+            return -1;
+        }
+        switch (keyMode) {
+        case KEY_128BITS:
+            dma_descriptor[CRYPTODMA_CIPHER] |= (0x4 << 3);
+            break;
+        case KEY_192BITS:
+            dma_descriptor[CRYPTODMA_CIPHER] |= (0x2 << 3);
+            break;
+        case KEY_256BITS:
+            dma_descriptor[CRYPTODMA_CIPHER] |= (0x1 << 3);
+            break;
+        default:
+           break;
+        }
+        break;
+
+    case SM3:
+        des_ctrl |= DES_USE_SM3 | DES_USE_DESCRIPTOR_KEY|DES_USE_DESCRIPTOR_IV;
+        dma_descriptor[CRYPTODMA_CTRL] = des_ctrl;
+        dma_descriptor[CRYPTODMA_CIPHER] = 0x1;
+        
+        break;
+
+    case SM4:
+        des_ctrl |= DES_USE_DESCRIPTOR_IV | DES_USE_SM4 | IV_OUT0_SELECT;
+		if(otp==CRYPTODMA_KEY_SOURCE_OTP){
+			des_ctrl |= OTP_KEY_SEL;
+		}else{
+			des_ctrl |= DES_USE_DESCRIPTOR_KEY;
+		}
+        dma_descriptor[CRYPTODMA_CTRL] = des_ctrl;
+        switch (b) {
+        case ECB:
+            break;
+        case CBC:
+            dma_descriptor[CRYPTODMA_CIPHER] = CBC_ENABLE << 1;
+            break;
+        case CTR:
+            dma_descriptor[CRYPTODMA_CIPHER] = 0x1 << 2;
+            break;
+        case OFB:
+            dma_descriptor[CRYPTODMA_CIPHER] = 0x1 << 3;
+            break;
+        default:
+            return -1;
+        }
+        break;
+	case BYPASS: {
+		dma_descriptor[CRYPTODMA_CTRL] = DES_USE_BYPASS | 0xF;
+		break;
+	}
+    case SHA256:
+		dma_descriptor[CRYPTODMA_CIPHER] = (0x1 << 1);
+    case SHA1:
+        dma_descriptor[CRYPTODMA_CTRL] = DES_USE_DESCRIPTOR_KEY  |
+						 DES_USE_SHA | 0xF;
+		dma_descriptor[CRYPTODMA_CIPHER] |= 0x1;
+        break;
+	case BASE64_CUSTOMER:
+	case BASE64: {
+		dma_descriptor[CRYPTODMA_CTRL] = DES_USE_BASE64 | 0xF;
+		if (isEncrypt) {
+			dma_descriptor[BASE64_SIZE] = (len + (3 - 1)) / 3 * 4;
+		} else {
+			dma_descriptor[BASE64_SIZE] = (len / 4) * 3;
+		}
+		break;
+	}
+    case TDES:
+		dma_descriptor[CRYPTODMA_CIPHER] = (0x1 << 3);
+    case DES:
+        des_ctrl |= DES_USE_DESCRIPTOR_IV | DES_USE_DES | DES_USE_DESCRIPTOR_KEY;
+        dma_descriptor[CRYPTODMA_CTRL] = des_ctrl;
+        switch (b) {
+        case ECB:
+            break;
+        case CBC:
+            dma_descriptor[CRYPTODMA_CIPHER] |= (CBC_ENABLE << 1);
+            break;
+        case CTR:
+            dma_descriptor[CRYPTODMA_CIPHER] |= (0x1 << 2);
+            break;
+        default:
+            return -1;
+        }
+        break;
+    default:
+        return -1;
+    }
+
+    if (isEncrypt) {
+        dma_descriptor[CRYPTODMA_CIPHER] |= 0x1;
+    }
+
+    dma_descriptor[CRYPTODMA_SRC_ADDR_L] = (uint32_t)(src & 0xFFFFFFFF);
+    dma_descriptor[CRYPTODMA_SRC_ADDR_H] = (uint32_t)(src >> 32);
+    dma_descriptor[CRYPTODMA_DATA_AMOUNT_L] = (uint32_t)(len & 0xFFFFFFFF);
+    dma_descriptor[CRYPTODMA_DATA_AMOUNT_H] = (uint32_t)(len >> 32);
+
+    if (a != SHA256 && a != SHA1 && a != SM3) {
+        dma_descriptor[CRYPTODMA_DST_ADDR_L] = (uint32_t)(des & 0xFFFFFFFF);
+        dma_descriptor[CRYPTODMA_DST_ADDR_H] = (uint32_t)(des >> 32);
+    }
+
+    if (a == AES || a == SM4 || a == DES || a == TDES) {
+        uint32_t key_size = 0;
+        switch (keyMode) {
+        case KEY_128BITS:
+            key_size = 16;
+            break;
+        case KEY_192BITS:
+            key_size = 24;
+            break;
+        case KEY_256BITS:
+            key_size = 32;
+            break;
+        }
+#if 0
+		for (i = 0; i < 16; i++) {
+			NOTICE("key[%d] %x\n", i, key[i]);
+			NOTICE("iv[%d] %x\n", i, iv[i]);
+		}
+#endif
+		if(otp!=CRYPTODMA_KEY_SOURCE_OTP){
+			memcpy(&dma_descriptor[CRYPTODMA_KEY], key, key_size);
+		}
+		if(b!=ECB){
+			memcpy(&dma_descriptor[CRYPTODMA_IV], iv, 16);
+		}
+    }else if (a == SHA256) {
+		// Clear SHA output first
+		for (i = 0; i < 8; i++)
+			mmio_write_32(SEC_CRYPTODMA_BASE + CRYPTODMA_SHA_PARA + i * 4,
+				      0x12345678);
+
+		for (i = 0; i < 8; i++)
+			dma_descriptor[CRYPTODMA_KEY + i] = state[i];
+	} else if (a == SM3) {
+		for (i = 0; i < 8; i++)
+			mmio_write_32(SEC_CRYPTODMA_BASE + CRYPTODMA_SM3_PARA + i * 4,
+				      0x12345678);
+
+		for (i = 0; i < 8; i++)
+			dma_descriptor[CRYPTODMA_KEY + i] = state[i];
+	} else if (a == SHA1) {
+		// Clear SHA output first
+		for (i = 0; i < 5; i++)
+			mmio_write_32(SEC_CRYPTODMA_BASE + CRYPTODMA_SHA_PARA + i * 4,
+				      0x12345678);
+
+		for (i = 0; i < 5; i++)
+			dma_descriptor[CRYPTODMA_KEY + i] = state[i];
+	} 
+#if LOG_LEVEL >= LOG_LEVEL_INFO
+	for (int i = 0; i < 22; i++) {
+		NOTICE("dma_descriptor[%d] = %x\n", i, dma_descriptor[i]);
+	}
+#endif
+
+	flush_dcache_range((unsigned long)dma_descriptor, sizeof(dma_descriptor));
+    flush_dcache_range((unsigned long)src, len);
+    mmio_write_32(SEC_CRYPTODMA_BASE + CRYPTODMA_DES_BASE_L,
+                  (uint32_t)((uint64_t)dma_descriptor & 0xFFFFFFFF));
+    mmio_write_32(SEC_CRYPTODMA_BASE + CRYPTODMA_DES_BASE_H,
+                  (uint32_t)((uint64_t)dma_descriptor >> 32));
+	mmio_write_32(SEC_CRYPTODMA_BASE + CRYPTODMA_INT_MASK, 0x0);
+	// Clear interrupt
+	mmio_write_32(SEC_CRYPTODMA_BASE + CRYPTODMA_WR_INT, 0x7);
+
+	if (a == BASE64_CUSTOMER) {
+		uint32_t value = 0;
+		// '/'->'!';'+'->'#'.'+'=0x2b '/'=0x2f
+		value = ('!' << 8) | '#';
+		mmio_write_32(SEC_CRYPTODMA_BASE + CRYPTODMA_BASE64_CUSTOMIZE_CODE,
+			      value);
+	}
+
+	
+    mmio_write_32(SEC_CRYPTODMA_BASE + CRYPTODMA_DMA_CTRL,
+                  DMA_WRITE_MAX_BURST << 24 | DMA_READ_MAX_BURST << 16 |
+                  DMA_DESCRIPTOR_MODE << 1 | DMA_ENABLE);
+    do {
+        data = mmio_read_32(SEC_CRYPTODMA_BASE + CRYPTODMA_WR_INT);
+    } while (data == 0);
+    if (a == SHA256) {
+		for (i = 0; i < 8; i++) {
+			uintptr_t a = SEC_CRYPTODMA_BASE + CRYPTODMA_SHA_PARA + i * 4;
+			state[i] = mmio_read_32(a);
+		}
+		len = 32;
+	} else if (a == SHA1) {
+		for (i = 0; i < 5; i++) {
+			uintptr_t a = SEC_CRYPTODMA_BASE + CRYPTODMA_SHA_PARA + i * 4;
+			state[i] = mmio_read_32(a);
+		}
+		len = 20;
+	} else if (a == SM3) {
+		for (i = 0; i < 8; i++) {
+			uintptr_t a = SEC_CRYPTODMA_BASE + CRYPTODMA_SM3_PARA + i * 4;
+			state[i] = mmio_read_32(a);
+		}
+		len = 32;
+	} else {
+		inv_dcache_range(des, len);
+	}
+    return len;
+}
 int plat_cryptodma_sha256_start(plat_cryptodma_sha256_t *ctx)
 {
 	INFO("%s:\n", __func__);

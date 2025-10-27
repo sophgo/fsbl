@@ -131,6 +131,7 @@ static inline void feed_dog(void)
 }
 
 void platform_setup(void);
+void platform_warmentry(void);
 
 #endif /* __ASSEMBLY__ */
 

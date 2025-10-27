@@ -8,7 +8,7 @@
 #define __CV_PRIVATE_H
 
 #include <sys/types.h>
-
+#include "cryptodma.h"
 #define GET_USB_BOOT_CFG(usb_boot_conf) (usb_boot_conf & 0x0000000F)
 #define GET_USB_VID_VAL(usb_boot_conf)  ((usb_boot_conf >> 4) & 0x0000FFFF)
 
@@ -95,6 +95,12 @@ void plat_wait_debug_port(void);
 
 uint32_t get_mfr_secret_id(void);
 
+enum mode { AES_ECB = 0, AES_CBC = 1, AES_CTR = 2, DES_DES = 3, DES_TDES = 4 };
+
+enum key_mode { AES_128BIT = 4, AES_192BIT = 2, AES_256BIT = 1 };
+
+enum action { DECRYPT = 0, ENCRYPTION = 1 };
+
 enum algo {
 	ALGO_BYPASS = 8,
 	ALGO_AES = 9,
@@ -103,28 +109,87 @@ enum algo {
 	ALGO_BASE64 = 13
 };
 
-enum mode {
-	AES_ECB = 0,
-	AES_CBC = 1,
-	AES_CTR = 2,
-	DES_DES = 3,
-	DES_TDES = 4
-};
 
-enum key_mode {
-	AES_128BIT = 4,
-	AES_192BIT = 2,
-	AES_256BIT = 1
-};
+typedef enum {
+    ECB = 0,
+    CBC = 1,
+    CTR = 2,
+    OFB = 3,
+	XXX = 4
+} E_MODE;
 
-enum action {
-	DECRYPT = 0,
-	ENCRYPTION = 1
-};
-enum otp {
-	USE_DMA_KEY = 0,
-	USE_OTP_KEY = 1
-};
+typedef enum {
+    KEY_128BITS = 1,
+    KEY_192BITS = 2,
+    KEY_256BITS = 3
+} E_KEY_MODE;
+
+typedef enum {
+    AES = 0,
+    SM3 = 1,
+    SM4 = 2,
+    BYPASS = 3,
+    SHA256 = 4,
+    SHA1 = 5,
+    BASE64 = 6,
+    BASE64_CUSTOMER = 7,
+    TDES = 8,
+    DES = 9
+} E_ALGO;
+typedef enum CRYPTODMA_ALGO_MODE {
+	CRYPTODMA_ALGO_MODE_ECB,
+	CRYPTODMA_ALGO_MODE_CBC,
+	CRYPTODMA_ALGO_MODE_CTR,
+	CRYPTODMA_ALGO_MODE_OFB,
+} CRYPTODMA_ALGO_MODE_E;
+
+typedef enum CRYPTODMA_KEY_SIZE {
+	CRYPTODMA_KEY_SIZE_64BITS,
+	CRYPTODMA_KEY_SIZE_128BITS,
+	CRYPTODMA_KEY_SIZE_192BITS,
+	CRYPTODMA_KEY_SIZE_256BITS,
+} CRYPTODMA_KEY_SIZE_E;
+
+typedef enum CRYPTODMA_ACTION {
+	CRYPTODMA_ACTION_ENCRYPTION,
+	CRYPTODMA_ACTION_DECRYPT,
+} CRYPTODMA_ACTION_E;
+
+typedef enum CRYPTODMA_KEY_SOURCE {
+	CRYPTODMA_KEY_SOURCE_DESCRIPTOR,
+	CRYPTODMA_KEY_SOURCE_OTP, // key from otp or efuse
+} CRYPTODMA_KEY_SOURCE_E;
+typedef enum CRYPTODMA_SHA {
+	CRYPTODMA_SHA_SHA1,
+	CRYPTODMA_SHA_SHA256,
+} CRYPTODMA_SHA_E;
+typedef struct cryptoDMA_ctrl {
+	CRYPTODMA_KEY_SOURCE_E key_src;
+	int is_end;
+	uint64_t next_descriptor;
+} cryptoDMA_ctrl_s;
+
+typedef struct cryptoDMA_base64_action {
+	CRYPTODMA_ACTION_E action;
+} cryptoDMA_base64_action_s;
+
+
+
+typedef struct cryptoDMA_aes_config {
+	uintptr_t key;
+	uintptr_t iv;
+	CRYPTODMA_ALGO_MODE_E mode;
+	CRYPTODMA_KEY_SIZE_E key_mode;
+	CRYPTODMA_ACTION_E action;
+	CRYPTODMA_KEY_SOURCE_E otp;
+} cryptoDMA_aes_config_s;
+
+typedef struct cryptoDMA_des_config {
+	uintptr_t key;
+	uintptr_t iv;
+	CRYPTODMA_ALGO_MODE_E mode;
+	CRYPTODMA_KEY_SIZE_E action;
+} cryptoDMA_des_config_s;
 typedef struct _spacc_exec_config {
 	enum algo algo;
 	enum mode mode;
@@ -132,15 +197,29 @@ typedef struct _spacc_exec_config {
 	uintptr_t key;
 	uintptr_t iv;
 	enum action action;
-	enum otp otp;
+	CRYPTODMA_KEY_SOURCE_E otp;
 } spacc_exec_config;
+typedef struct cryptoDMA_sha_config {
+	CRYPTODMA_SHA_E algo;
+	uint32_t state[8];
+	unsigned char result[32];
+} cryptoDMA_sha_config_s;
+
+typedef struct cryptoDMA_sm3_config {
+	uint32_t state[8];
+} cryptoDMA_sm3_config_s;
+
+typedef cryptoDMA_aes_config_s cryptoDMA_sm4_config_s;
+typedef cryptoDMA_des_config_s cryptoDMA_tdes_config_s;
 
 int plat_cryptodma_exec(uintptr_t src, uintptr_t dst, uint64_t len, spacc_exec_config *config);
 
 int plat_cryptodma_base64(uintptr_t src, uint64_t len, uintptr_t dst, uint32_t customer_code, uint32_t action);
 
 int plat_cryptodma_sha256(const void *msg, uint64_t len, uint8_t digest[32]);
-
+int plat_cryptodma_do(int isEncrypt, uintptr_t in, uintptr_t out, uint64_t len,
+              unsigned char *key, E_KEY_MODE keyMode, unsigned char *iv,
+              E_ALGO a, E_MODE b, uint32_t *state,CRYPTODMA_KEY_SOURCE_E otp);
 void bm_storage_boot_loader_version(uint32_t addr);
 
 #endif /*__CV_PRIVATE_H*/

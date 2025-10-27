@@ -28,19 +28,22 @@
 #include "mbedtls/platform.h"
 #include "mbedtls/aes.h"
 #include "mbedtls/sha256.h"
-
+#include "endian.h"
 #define u64 uint64_t
 
 static uint32_t global_time0;
-static void hexdump(const char *label, const void *buf, size_t len) {
+static void hexdump(const char *label,const void *buf, size_t len) {
+#if LOG_LEVEL >= LOG_LEVEL_INFO
     size_t i;
     uint8_t *data = (uint8_t *)buf;
-    NOTICE("%s (%zu bytes):", label, len);
+	(void)data;
+	NOTICE("%s (%zu bytes):", label, len);
     for (i = 0; i < len; i++) {
-        NOTICE("%x", data[i]);
+        INFO("%x", (unsigned int)data[i]);
         if ((i % 16 == 15) || (i == len - 1))
-            NOTICE("\n");
+            INFO("\n");
     }
+#endif
 }
 bmsp_args_t *cvsp_privte_spacc_exec_handler(uint64_t func, uint64_t arg1,
 					    uint64_t arg2, uint64_t arg3,
@@ -72,10 +75,10 @@ bmsp_args_t *cvsp_privte_spacc_exec_handler(uint64_t func, uint64_t arg1,
 	config.iv = (uintptr_t)iv;
 	config.action = action;
 	config.otp = otp;
-    NOTICE("Received Parameters:");
-	NOTICE("src: %p, len: %lu, key: %p, key_len: %lu, iv: %p, algo: %u, mode: %u, key_mode: %u, action: %u, otp: %u\n", src, len, key, key_len, iv, algo, mode, key_mode, action, otp);
+    INFO("Received Parameters:");
+	INFO("src: %p, len: %lu, key: %p, key_len: %lu, iv: %p, algo: %u, mode: %u, key_mode: %u, action: %u, otp: %u\n", src, len, key, key_len, iv, algo, mode, key_mode, action, otp);
     hexdump("Source Data", src, len); 
-	if(otp!=USE_OTP_KEY){
+	if(otp!=CRYPTODMA_KEY_SOURCE_OTP){
 		hexdump("Key Data", key, key_len); 
 	}
 	if(mode!=AES_ECB){
@@ -84,9 +87,155 @@ bmsp_args_t *cvsp_privte_spacc_exec_handler(uint64_t func, uint64_t arg1,
     
 	ret=plat_cryptodma_exec((uintptr_t)src, (uintptr_t)dst, len, &config);
 	hexdump("result Data",src,len);
-	return bmsp_set_smc_args(TEESMC_OPTEED_RETURN_CALL_DONE, len, 0, 0, 0,
-				 0, 0, ret);
+	return bmsp_set_smc_args(TEESMC_OPTEED_RETURN_CALL_DONE, ret, 0, 0, 0,
+				 0, 0, 0);
 }
+bmsp_args_t *cvsp_privte_aes_handler(uint64_t func, uint64_t arg1,
+                     uint64_t arg2, uint64_t arg3,
+                     uint64_t arg4, uint64_t arg5,
+                     uint64_t arg6, uint64_t arg7)
+{
+    void *src = (void *)arg1;
+    void *dst = (void *)arg2;
+    u64 len = arg3;
+    void *key = (void *)arg4;
+    void *iv = (void *)arg5;
+    uint64_t key_len = arg6;
+    uint32_t state[8] = {0};
+    u64 ret;
+
+    // 参数检查和缓存操作
+    inv_dcache_range((uintptr_t)src, len);
+    inv_dcache_range((uintptr_t)key, key_len);
+    inv_dcache_range((uintptr_t)iv, 16);
+
+    // 从arg7解析配置
+    E_MODE mode = (arg7) & 0x3;
+    E_KEY_MODE key_mode = (arg7 >> 2) & 0x3;
+    int isEncrypt = ((arg7 >> 4) & 0x1)==0?1:0;
+	CRYPTODMA_KEY_SOURCE_E key_source =((arg7 >> 5) & 0x1);
+
+    // 调用新接口
+    ret = plat_cryptodma_do(isEncrypt, (uintptr_t)src, (uintptr_t)dst, len,
+                           key, key_mode, iv, AES, mode, state,key_source);
+
+    return bmsp_set_smc_args(TEESMC_OPTEED_RETURN_CALL_DONE, len, 0, 0, 0, 0, 0, ret);
+}
+
+// SM3接口修改
+bmsp_args_t *cvsp_privte_sm3_handler(uint64_t func, uint64_t arg1,
+                     uint64_t arg2, uint64_t arg3,
+                     uint64_t arg4, uint64_t arg5,
+                     uint64_t arg6, uint64_t arg7)
+{
+    void *src = (void *)arg1;
+    u64 len = arg2;
+    void *dst = (void *)arg3;
+    uint32_t state[8] = {0};
+    int ret;
+    inv_dcache_range((uintptr_t)src, len);
+	NOTICE("%s(): src=%p, len=%lu, dst=%p\n",
+	       __func__, src, len, dst);
+	state[0] = 0x7380166f;
+	state[1] = 0x4914b2b9;
+	state[2] = 0x172442d7;
+	state[3] = 0xda8a0600;
+	state[4] = 0xa96f30bc;
+	state[5] = 0x163138aa;
+	state[6] = 0xe38dee4d;
+	state[7] = 0xb0fb0e4e;
+    ret = plat_cryptodma_do(0, (uintptr_t)src, (uintptr_t)dst, len,
+                           NULL, KEY_128BITS, NULL, SM3, ECB, (uint32_t *)state,CRYPTODMA_KEY_SOURCE_DESCRIPTOR);
+
+
+    memcpy(dst, state, 32);
+    flush_dcache_range((uintptr_t)dst, 32);
+    return bmsp_set_smc_args(TEESMC_OPTEED_RETURN_CALL_DONE, ret, 0, 0, 0, 0, 0, 0);
+}
+
+// SM4接口修改
+bmsp_args_t *cvsp_privte_sm4_handler(u64 func, u64 arg1, u64 arg2, u64 arg3,
+                     u64 arg4, u64 arg5, u64 arg6, u64 arg7)
+{
+    void *src = (void *)arg1;
+    void *dst = (void *)arg2;
+    u64 len = arg3;
+    void *key = (void *)arg4;
+    void *iv = (void *)arg5;
+    uint32_t state[8] = {0};
+    
+    inv_dcache_range((uintptr_t)src, len);
+    inv_dcache_range((uintptr_t)key, 16); 
+    inv_dcache_range((uintptr_t)iv, 16);
+
+    E_MODE mode = (arg7) & 0x3;
+    int isEncrypt = ((arg7 >> 4) & 0x1)==0?1:0;
+	CRYPTODMA_KEY_SOURCE_E key_source =((arg7 >> 5) & 0x1);
+	NOTICE("%s(): src=%p, len=%lu, dst=%p, key=%p, iv=%p\n",
+	       __func__, src, len, dst, key, iv);
+    int ret = plat_cryptodma_do(isEncrypt, (uintptr_t)src, (uintptr_t)dst, len,
+                           key, KEY_128BITS, iv, SM4, mode, state,key_source);
+
+    if (ret == 0) {
+        flush_dcache_range((uintptr_t)dst, len);
+    }
+
+    return bmsp_set_smc_args(TEESMC_OPTEED_RETURN_CALL_DONE, ret, 0, 0, 0, 0, 0, 0);
+}
+
+// TDES函数改造
+bmsp_args_t *cvsp_privte_tdes_handler(u64 func, u64 arg1, u64 arg2, u64 arg3,
+                      u64 arg4, u64 arg5, u64 arg6, u64 arg7)
+{
+    void *src = (void *)arg1;
+    u64 len = arg2;
+    void *dst = (void *)arg3;
+    void *key = (void *)arg4;
+    void *iv = (void *)arg5;
+    uint32_t state[8] = {0};
+    int ret;
+	
+    inv_dcache_range((uintptr_t)key, 24);
+    inv_dcache_range((uintptr_t)iv, 8);
+	NOTICE("%s(): src=%p, len=%lu, dst=%p, key=%p, iv=%p\n",
+	       __func__, src, len, dst, key, iv);
+    // arg6为mode，arg7为action(encrypt/decrypt)
+    E_MODE mode = arg6;
+    int isEncrypt = arg7==0?1:0;
+	
+    ret = plat_cryptodma_do(isEncrypt, (uintptr_t)src, (uintptr_t)dst, len,
+                           key, KEY_192BITS, iv, TDES, mode, state,CRYPTODMA_KEY_SOURCE_DESCRIPTOR);
+
+    flush_dcache_range((uintptr_t)dst, len);
+
+    return bmsp_set_smc_args(TEESMC_OPTEED_RETURN_CALL_DONE, ret, 0, 0, 0, 0, 0, 0);
+}
+bmsp_args_t *cvsp_privte_des_handler(u64 func, u64 arg1, u64 arg2, u64 arg3,
+                      u64 arg4, u64 arg5, u64 arg6, u64 arg7)
+{
+    void *src = (void *)arg1;
+    u64 len = arg2;
+    void *dst = (void *)arg3;
+    void *key = (void *)arg4;
+    void *iv = (void *)arg5;
+    uint32_t state[8] = {0};
+    int ret;
+	
+    inv_dcache_range((uintptr_t)key, 24);
+    inv_dcache_range((uintptr_t)iv, 8);
+	NOTICE("%s(): src=%p, len=%lu, dst=%p, key=%p, iv=%p\n",
+	       __func__, src, len, dst, key, iv);
+    // arg6为mode，arg7为action(encrypt/decrypt)
+    E_MODE mode = arg6;
+    int isEncrypt = arg7==0?1:0;
+	
+    ret = plat_cryptodma_do(isEncrypt, (uintptr_t)src, (uintptr_t)dst, len,
+                           key, KEY_128BITS, iv, DES, mode, state,CRYPTODMA_KEY_SOURCE_DESCRIPTOR);
+
+    flush_dcache_range((uintptr_t)dst, len);
+    return bmsp_set_smc_args(TEESMC_OPTEED_RETURN_CALL_DONE, ret, 0, 0, 0, 0, 0, 0);
+}
+
 
 bmsp_args_t *cvsp_privte_efuse_read_handler(uint64_t func, uint64_t arg1,
 					    uint64_t arg2, uint64_t arg3,
@@ -413,6 +562,25 @@ bmsp_args_t *cvsp_private_smc_handler(uint64_t func, uint64_t arg1,
 		return cvsp_privte_sha256_handler(func, arg1, arg2, arg3,
 							arg4, arg5, arg6, arg7);
 
+	case OPTEE_SMC_CALL_CV_AES:
+		return cvsp_privte_aes_handler(func, arg1, arg2, arg3,
+						       arg4, arg5, arg6, arg7);
+
+	case OPTEE_SMC_CALL_CV_DES:
+		return cvsp_privte_des_handler(func, arg1, arg2, arg3,
+						       arg4, arg5, arg6, arg7);
+
+	case OPTEE_SMC_CALL_CV_SM4:
+		return cvsp_privte_sm4_handler(func, arg1, arg2, arg3,
+						       arg4, arg5, arg6, arg7);
+
+	case OPTEE_SMC_CALL_CV_TDES:
+		return cvsp_privte_tdes_handler(func, arg1, arg2, arg3,
+						       arg4, arg5, arg6, arg7);
+
+	case OPTEE_SMC_CALL_CV_SM3:
+		return cvsp_privte_sm3_handler(func, arg1, arg2, arg3,
+						       arg4, arg5, arg6, arg7);
 	default:
 		ERROR("Unknown func id (0x%lx)\n", func);
 		break;
