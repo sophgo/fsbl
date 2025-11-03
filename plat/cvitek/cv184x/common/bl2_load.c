@@ -349,6 +349,30 @@ int load_user_param_and_logo(int retry)
 
 	NOTICE("UPE.\n");
 #endif
+#ifdef PARAM_OFFSET
+	if (BL_PARAM_RUNADDR) {
+		int ret = -1;
+		void *image_buf = NULL;
+		u_int8_t is_read_fip_partition = 1;
+
+		image_buf  = (void *)(uintptr_t)BL_PARAM_RUNADDR;
+
+		NOTICE("PARAM:0x%x/0x%d/0x%p\n", PARAM_OFFSET, PARAM_SIZE, image_buf);
+		if (p_rom_api.get_boot_src() == BOOT_SRC_EMMC || p_rom_api.get_boot_src() == BOOT_SRC_SPI_NAND)
+			is_read_fip_partition = 0;
+
+		// load blcp 2nd image from flash to run comp address, and speed up freqency
+		ret = load_data_from_storage(image_buf, PARAM_OFFSET, PARAM_SIZE, retry,
+										is_read_fip_partition);
+
+		if (ret < 0) {
+			ERROR("load data failed! loadaddr:0x%x, size:%d, retry:%d\n",
+				  PARAM_OFFSET, PARAM_SIZE, retry);
+			return ret;
+		}
+		NOTICE("PUPE.\n");
+	}
+#endif
 	return 0;
 }
 

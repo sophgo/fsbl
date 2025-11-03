@@ -213,17 +213,9 @@ void sys_pll_init(void)
 #ifdef OD_CLK_SEL
 	sys_pll_init_od();
 #endif
-	//fix cam*pll_ssc_syn_set reg to be empty
-	uint32_t cam0pll_ssc_set = 0x90000000;	//cam0pll synthesizer set 36
-	uint32_t cam1pll_ssc_set = 0x90000000;	//cam1pll synthesizer set 36
-
 	//trigger pll G2
-	//set cam*pll_ssc_syn_set reg for initial value and don't trigger
-	mmio_write_32(REG_CAM0PLL_SSC_SYN_SET, cam0pll_ssc_set);
-	mmio_write_32(REG_CAM1PLL_SSC_SYN_SET, cam1pll_ssc_set);
-
 	//a0pll sw update
-	mmio_write_32(REG_APLL_SSC_SYN_SET, 0x1D4C0000);	//set a0pll to 491.52MHz
+	mmio_write_32(REG_APLL_SSC_SYN_SET, 0x1D4C258C);	//set a0pll to 491.52MHz
 	mmio_write_32(REG_APLL_SSC_SYN_CTRL, TOGGLE_SSC_SYN_SW_UP);
 	//disppll sw update
 	mmio_write_32(REG_DISPPLL_SSC_SYN_CTRL, TOGGLE_SSC_SYN_SW_UP);
@@ -424,6 +416,16 @@ void set_rtc_en_registers(void)
 	NOTICE("st_on_reason=%x\n", read_data);
 	read_data = mmio_read_32(REG_RTC_BASE + RTC_ST_OFF_REASON);
 	NOTICE("st_off_reason=%x\n", read_data);
+	read_data = mmio_read_32(0x05025008);
+	write_data = 0x00200000|(read_data & ~0x20);
+	mmio_write_32(0x05025008, write_data);
+	read_data = mmio_read_32(0x05025008);
+	read_data = read_data & 0x20;
+	while (read_data == 0x20) {
+		read_data = mmio_read_32(0x05025008);
+		NOTICE("RTC_CTRL0=%x\n", read_data);
+		read_data = read_data & 0x20;
+	}
 
 	mmio_write_32(REG_RTC_BASE + RTC_EN_SHDN_REQ, 0x01);
 	while (mmio_read_32(REG_RTC_BASE + RTC_EN_SHDN_REQ) != 0x01)

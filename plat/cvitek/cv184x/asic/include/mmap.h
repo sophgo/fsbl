@@ -2,6 +2,7 @@
 #define __MMAP_H__
 
 #include "cvi_board_memmap.h"
+#include "cvipart.h"
 
 /*
  * BL1 read-only specific defines.
@@ -107,4 +108,23 @@
 //Reserve RTC SRAM last RTC_SRAM_RESERVE_BYTE_SIZE bytes to save OEM information
 #define RTC_SRAM_RESERVE_BYTE_SIZE	256
 #define OEM_INFO_RTC_SRAM_ADDR  (0x5200000 + 0x8000 - RTC_SRAM_RESERVE_BYTE_SIZE)
+
+#if defined(PARAM_OFFSET) && defined(CVIMMAP_SHARE_PARAM_ADDR)
+#define BL_PARAM_RUNADDR  CVIMMAP_SHARE_PARAM_ADDR
+#define BL_PARAM_LOADADDR PARAM_OFFSET
+#define BL_PARAM_SIZE     PARAM_SIZE
+#else
+#define BL_PARAM_RUNADDR  0
+#define BL_PARAM_LOADADDR 0
+#define BL_PARAM_SIZE     0
+#endif
+
+#if defined(PARAM_OFFSET_REDUND) && defined(CVIMMAP_SHARE_PARAM_ADDR_BAK)
+#define BL_PARAM_BAK_RUNADDR  CVIMMAP_SHARE_PARAM_ADDR_BAK
+#define BL_PARAM_BAK_LOADADDR PARAM_OFFSET_REDUND
+#else
+#define BL_PARAM_BAK_RUNADDR  0
+#define BL_PARAM_BAK_LOADADDR 0
+#endif
+
 #endif /* __MMAP_H__ */
