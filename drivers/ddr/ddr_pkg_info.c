@@ -25,7 +25,7 @@ void read_ddr_pkg_info(void)
 
 	NOTICE("conf_info(0x03000004)=0x%x\n", conf_info);
 	pkg_type = (FIELD_GET(conf_info, 23, 23) << 3) | FIELD_GET(conf_info, 30, 28);
-	pkg_type = 2; //BRINGUP force pkg_type to 2
+	//pkg_type = 2;
 	NOTICE("pkg_type=%x\n", pkg_type);
 
 	switch (pkg_type) {
@@ -92,7 +92,7 @@ void read_ddr_pkg_info(void)
 	//if onebin, need to set datarate here
 
 	pkg = FIELD_GET(efuse_leakage, 2, 0);
-	pkg = PKG_QFN;
+	//pkg = PKG_QFN;
 
 	switch (ddr_capacity) {
 	case DDR_CAPACITY_512M:
