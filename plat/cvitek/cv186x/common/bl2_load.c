@@ -769,10 +769,10 @@ void fip_src_check(void)
 {
 	int retry = 0;
 
+	mmio_setbits_32(PCIE_BOOT_REG, 0x3 << 16);
 	if (p_rom_api->get_boot_src() != BOOT_SRC_RTC_NOR)
 		return;
 
-	mmio_setbits_32(PCIE_BOOT_REG, 0x3 << 16);
 	NOTICE("Waiting for boot image in position\n");
 	while (1) {
 		feed_dog();

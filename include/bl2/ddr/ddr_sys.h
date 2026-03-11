@@ -175,6 +175,7 @@ enum board_ddr_type_e {
 
 //#define DDR_SHMOO_LOG_RX_LP4
 //#define DDR_SHMOO_LOG_TX_LP4
+//#define DDR_SHMOO_LOG_TX_SW_LP4
 
 #define CSLVL_CALVL  //Cal CA and CS both in CA Leveling
 
@@ -433,6 +434,7 @@ extern uint32_t    REG_DDRPLL_MAS_F;
 extern uint32_t    REG_DDRPLL_MAS_DIV2N;
 extern uint32_t    REG_DDRPLL_MAS_KPD;
 extern uint32_t    DDR_SSO_PERIOD;  // mem_freq/200
+extern uint32_t		ave_dll_code_shmoo;
 
 void ddr_define_struct_init(uint8_t sys_id);
 void ddr_global_para_init(void);
@@ -559,4 +561,5 @@ void cvx32_rdlvl_req_shmoo_real_LP4(uint8_t range, int mode, int sso_period, int
 #ifdef DDR_SHMOO_LOG_TX_LP4
 void cvx32_wdqlvl_req_shmoo_real_LP4(int mode, int sso_period, int rank, int vref_start, int vref_end, int vref_step,int  dline_start, int  dline_end, int dline_step, int en_dmdbi);
 #endif
+void cvx32_wdqlvl_req_sw2d_SHMOO(uint32_t mode, uint32_t sso_period, uint32_t rank, uint32_t vref_start, uint32_t vref_end, uint32_t vref_step);
 #endif /* __DDR_SYS_H__ */
