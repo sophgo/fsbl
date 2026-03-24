@@ -998,7 +998,7 @@ retry_from_flash:
 	sync_cache();
 	console_flush();
 
-	switch_rtc_mode_2nd_stage();
+	// switch_rtc_mode_2nd_stage();
 
 	NOTICE("M/%lx/N/%lx/", monitor_entry, loader_2nd_entry);
 	if (monitor_entry) {

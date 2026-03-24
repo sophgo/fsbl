@@ -217,8 +217,28 @@ void sys_pll_init(void)
 	//a0pll sw update
 	mmio_write_32(REG_APLL_SSC_SYN_SET, 0x1D4C258C);	//set a0pll to 491.52MHz
 	mmio_write_32(REG_APLL_SSC_SYN_CTRL, TOGGLE_SSC_SYN_SW_UP);
+
+	//disppll reg_step (Modulation = 33KHz , Deviation = 3%)
+	mmio_write_32(REG_DISPPLL_SSC_SYN_STEP, 0x5F53);	//reg_step
+	//disppll ssc enable
+	//mmio_setbits_32(REG_DISPPLL_SSC_SYN_CTRL, TOGGLE_SSC_ENABLE);
 	//disppll sw update
-	mmio_write_32(REG_DISPPLL_SSC_SYN_CTRL, TOGGLE_SSC_SYN_SW_UP);
+	mmio_setbits_32(REG_DISPPLL_SSC_SYN_CTRL, TOGGLE_SSC_SYN_SW_UP);
+
+	//enable cam0pll ssc_syn_src_en
+	mmio_setbits_32(REG_PLL_G2_SSC_SYN_CTRL, 0x1 << 4);	//set cam0pll parent from xtal to mipimpll
+	//cam0pll reg_set / reg_span / reg_step (Modulation = 33KHz , Deviation = 3%)
+	mmio_write_32(REG_CAM0PLL_SSC_SYN_SET, 0x21555555);	//reg_set	108MHz
+	mmio_write_32(REG_CAM0PLL_SSC_SYN_SPAN, 0x332);		//reg_span
+	mmio_write_32(REG_CAM0PLL_SSC_SYN_STEP, 0x5019);	//reg_step
+	//cam0pll csr
+	mmio_clrsetbits_32(REG_CAM0PLL_CSR, (0x7F << 17), (0xA << 17));	//set cam0pll to 1080MHz
+	//cam0pll ssc bypass
+	mmio_clrbits_32(REG_CAM0PLL_SSC_SYN_CTRL, SET_SSC_SYN_BYPASS);
+	//cam0pll ssc enable
+	//mmio_setbits_32(REG_CAM0PLL_SSC_SYN_CTRL, TOGGLE_SSC_ENABLE);
+	//cam0pll sw update
+	mmio_setbits_32(REG_CAM0PLL_SSC_SYN_CTRL, TOGGLE_SSC_SYN_SW_UP);
 
 	udelay(10);
 	console_flush();
@@ -547,7 +567,10 @@ void platform_setup(void)
 
 	rom_api_redirect();
 	setup_dl_flag();
+
+#ifdef SWITCH_32K_XTAL
 	switch_rtc_mode_1st_stage();
+#endif
 	set_rtc_en_registers();
 	bm_storage_boot_loader_version(BL2_VERSION_BASE);
 }

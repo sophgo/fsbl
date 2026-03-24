@@ -166,7 +166,7 @@ PLAT                    :=      ${CHIP}_${SUBTYPE}
 SPDS			:=	$(sort $(filter-out none, $(patsubst services/spd/%,%,$(wildcard services/spd/*))))
 
 # Platforms providing their own TBB makefile may override this value
-INCLUDE_TBBR_MK		:=	1               
+INCLUDE_TBBR_MK		:=	1
 
 ################################################################################
 # Include SPD Makefile if one has been specified
@@ -422,6 +422,10 @@ $(eval $(call add_define, USB_DL_BY_FSBL))
 
 ifeq ($(OD_CLK_SEL),y)
 $(eval $(call add_define,OD_CLK_SEL))
+endif
+
+ifeq ($(SWITCH_32K_XTAL),y)
+$(eval $(call add_define,SWITCH_32K_XTAL))
 endif
 
 ifeq ($(ENABLE_BURN_BUTTON),y)
