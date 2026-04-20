@@ -366,7 +366,7 @@ void enable_top_wdt(void)
 {
 	// config top wdt 30s
 	mmio_write_32((PERI_WDT0_BASE + 0x4), 0xEE);
-	mmio_write_32((PERI_WDT0_BASE + 0x1c), 0x5969);
+	mmio_write_32((PERI_WDT0_BASE + 0x1c), 0xffff); // 85s
 	mmio_write_32(PERI_WDT0_BASE, 0xD1);
 }
 
