@@ -14,6 +14,8 @@ void bl2_main(void)
 {
 	ATF_STATE = ATF_STATE_BL2_MAIN;
 
+	mmio_write_32(0x05025018, 0x1ffffd);
+
 	platform_setup();
 
 	platform_warmentry();
