@@ -477,12 +477,6 @@ static void __dead2 bm_system_reset(void)
 	mmio_write_32(REG_RTC_BASE + RTC_EN_PWR_CYC_REQ, 0x01);
 	while (mmio_read_32(REG_RTC_BASE + RTC_EN_PWR_CYC_REQ) != 0x01)
 		;
-	mmio_write_32(0x05025018, 0x001FFFFD);// reset 8051
-	while (mmio_read_32(0x05025018) != 0x001FFFFD)
-		;
-	mmio_write_32(0x050250ac, 0x1);
-	while (mmio_read_32(0x050250ac) != 0x1)
-		;
 
 	mmio_write_32(REG_RTC_CTRL_BASE + RTC_CTRL0_UNLOCKKEY, 0xAB18);
 	mmio_setbits_32(REG_RTC_CTRL_BASE + RTC_CTRL0, 0xFFFF0800 | (0x1 << 3));
