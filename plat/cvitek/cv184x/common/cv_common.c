@@ -380,11 +380,10 @@ int plat_cryptodma_do(int isEncrypt, uintptr_t in, uintptr_t out, uint64_t len,
     switch (a) {
     case AES:
         des_ctrl |= DES_USE_DESCRIPTOR_IV | DES_USE_AES |IV_OUT0_SELECT;
-		if(otp==USE_OTP_KEY){
+		if (otp == USE_OTP_KEY)
 			des_ctrl |= OTP_KEY_SEL;
-		}else{
+		else
 			des_ctrl |= DES_USE_DESCRIPTOR_KEY;
-		}
         dma_descriptor[CRYPTODMA_CTRL] = des_ctrl;
         switch (b) {
         case ECB:
@@ -423,11 +422,10 @@ int plat_cryptodma_do(int isEncrypt, uintptr_t in, uintptr_t out, uint64_t len,
 
     case SM4:
         des_ctrl |= DES_USE_DESCRIPTOR_IV | DES_USE_SM4 | IV_OUT0_SELECT;
-		if(otp==USE_OTP_KEY){
+		if (otp == USE_OTP_KEY)
 			des_ctrl |= OTP_KEY_SEL;
-		}else{
+		else
 			des_ctrl |= DES_USE_DESCRIPTOR_KEY;
-		}
         dma_descriptor[CRYPTODMA_CTRL] = des_ctrl;
         switch (b) {
         case ECB:
@@ -504,7 +502,8 @@ int plat_cryptodma_do(int isEncrypt, uintptr_t in, uintptr_t out, uint64_t len,
 
     if (a == AES || a == SM4 || a == DES || a == TDES) {
         uint32_t key_size = 0;
-        switch (keyMode) {
+
+	switch (keyMode) {
         case KEY_128BITS:
             key_size = 16;
             break;
@@ -515,6 +514,7 @@ int plat_cryptodma_do(int isEncrypt, uintptr_t in, uintptr_t out, uint64_t len,
             key_size = 32;
             break;
         }
+	if (otp == USE_DES_KEY) {
 #ifdef DEBUG
 		for (i = 0; i < 16; i++) {
 			NOTICE("key[%d] %x\n", i, key[i]);
@@ -523,6 +523,7 @@ int plat_cryptodma_do(int isEncrypt, uintptr_t in, uintptr_t out, uint64_t len,
 #endif
 		memcpy(&dma_descriptor[CRYPTODMA_KEY], key, key_size);
 		memcpy(&dma_descriptor[CRYPTODMA_IV], iv, 16);
+	}
     }else if (a == SHA256) {
 		// Clear SHA output first
 		for (i = 0; i < 8; i++)

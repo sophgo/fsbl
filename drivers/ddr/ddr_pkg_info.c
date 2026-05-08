@@ -78,7 +78,7 @@ void read_ddr_pkg_info(void)
 		ddr_type = DDR_TYPE_DDR3;
 		break;
 	case 0xb: //NY 1Gb DDR3
-		ddr_vendor = DDR_VENDOR_NY_1G;
+		ddr_vendor = DDR_VENDOR_NY_N20_1G;
 		ddr_capacity = DDR_CAPACITY_1G;
 		//pkg = PKG_QFN;
 		ddr_type = DDR_TYPE_DDR3;
@@ -91,7 +91,7 @@ void read_ddr_pkg_info(void)
 
 	//if onebin, need to set datarate here
 
-	pkg = FIELD_GET(efuse_leakage, 2, 0);
+	pkg = FIELD_GET(efuse_leakage, 31, 29);
 	//pkg = PKG_QFN;
 
 	switch (ddr_capacity) {

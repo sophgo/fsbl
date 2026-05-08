@@ -422,6 +422,12 @@ $(eval $(call add_define, USB_DL_BY_FSBL))
 
 ifeq ($(OD_CLK_SEL),y)
 $(eval $(call add_define,OD_CLK_SEL))
+ifeq ($(TPU_OD_CLK_SEL),y)
+$(eval $(call add_define,TPU_OD_CLK_SEL))
+endif
+ifeq ($(CPU_OD_CLK_SEL),y)
+$(eval $(call add_define,CPU_OD_CLK_SEL))
+endif
 endif
 
 ifeq ($(SWITCH_32K_XTAL),y)

@@ -77,11 +77,6 @@ $(eval $(call add_define,X16_MODE))
 # overdrive clock setting
 ifeq ($(OD_CLK_SEL),y)
 $(eval $(call add_define,OD_CLK_SEL))
-else ifeq ($(VC_CLK_OVERDRIVE),y)
-$(eval $(call add_define,VC_CLK_OVERDRIVE))
-endif
-ifeq ($(TPU_PERF_MODE),y)
-$(eval $(call add_define,TPU_PERF_MODE))
 endif
 
 endif

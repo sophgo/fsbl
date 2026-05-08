@@ -161,10 +161,11 @@ void sys_pll_init_od(void)
 	config_core_power(0x9);
 	//1.switch pll to xtal(bypass mode)
 	mmio_write_32(REG_CLK_BYP_H104, 0xFFFFFFFF);
-	// clk_uart0 stay in pll mode to keep console working
-	mmio_write_32(REG_CLK_BYP_H108, 0xFFF7FFFF);
+	// clk_uart0 stay in pll mode or bypass mode to keep console working
+	mmio_setbits_32(REG_CLK_BYP_H108, 0xFFF7FFFF);
 	mmio_write_32(REG_CLK_BYP_H10C, 0xFFFFFFFF);
 
+#ifdef CPU_OD_CLK_SEL
 	//2.set tpll/appll/rvpll *_pll_csr to OD mode
 	//set div_sel bit17-23
 	div_sel_val = 60;	//1500MHz
@@ -186,7 +187,12 @@ void sys_pll_init_od(void)
 	val = mmio_read_32(REG_PLL_G6_CTRL);
 	val = val & (~0x00011111);
 	mmio_write_32(REG_PLL_G6_CTRL, val); //clear all pll PD
+#else
+	val = 0;
+	div_sel_val = 0;
+#endif
 
+#ifdef TPU_OD_CLK_SEL
 	//set clk_tpu_gdma src from tpll to cam0pll
 	//1. set reg_tpu_clk_gdma_sel bit2 0
 	mmio_clrbits_32(REG_CLK_SRC_SEL_H000, 1 << 2);
@@ -196,9 +202,16 @@ void sys_pll_init_od(void)
 	//set clk_tpu from 500MHz to 700MHz
 	//1. set div_tpu_clk_0 to 0x20009(D2)
 	mmio_write_32(REG_DIV_TPU_CLK_TPU_0, 0x20009);
+#endif
 
+	/*
+	From a software design perspective, we do not currently support
+	the OD (Output Drive) function for the video clock, not due to
+	hardware limitations. This feature can be enabled later
+	if software support is confirmed as required.
+	*/
 	//set vc_pr_warp clk src to div1
-	mmio_clrbits_32(REG_CLK_SRC_SEL_H000, 0x7 << 4);
+	// mmio_clrbits_32(REG_CLK_SRC_SEL_H000, 0x7 << 4);
 	//set clk_video_axi from 500MHz to 600MHz
 	//set clk_vc_src0 from 600MHz to 650MHz
 	//set clk_vc_src1 from 400MHz to 500MHz
@@ -228,9 +241,17 @@ void sys_pll_init(void)
 	//enable cam0pll ssc_syn_src_en
 	mmio_setbits_32(REG_PLL_G2_SSC_SYN_CTRL, 0x1 << 4);	//set cam0pll parent from xtal to mipimpll
 	//cam0pll reg_set / reg_span / reg_step (Modulation = 33KHz , Deviation = 3%)
+#ifdef TPU_OD_CLK_SEL
+	//cam0pll / 2 = clk_gdma = 650MHz
+	//unsupport "cam0pll ssc enable".
+	mmio_write_32(REG_CAM0PLL_SSC_SYN_SET, 0x1BB13B14);	//reg_set	130MHz
+	mmio_write_32(REG_CAM0PLL_SSC_SYN_SPAN, 0x3D9);		//reg_span
+	mmio_write_32(REG_CAM0PLL_SSC_SYN_STEP, 0x3748);	//reg_step
+#else
 	mmio_write_32(REG_CAM0PLL_SSC_SYN_SET, 0x21555555);	//reg_set	108MHz
 	mmio_write_32(REG_CAM0PLL_SSC_SYN_SPAN, 0x332);		//reg_span
 	mmio_write_32(REG_CAM0PLL_SSC_SYN_STEP, 0x5019);	//reg_step
+#endif
 	//cam0pll csr
 	mmio_clrsetbits_32(REG_CAM0PLL_CSR, (0x7F << 17), (0xA << 17));	//set cam0pll to 1080MHz
 	//cam0pll ssc bypass

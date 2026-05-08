@@ -173,30 +173,28 @@ bmsp_args_t *cvsp_privte_aes_handler(uint64_t func, uint64_t arg1,
                      uint64_t arg4, uint64_t arg5,
                      uint64_t arg6, uint64_t arg7)
 {
-    void *src = (void *)arg1;
-    void *dst = (void *)arg2;
-    u64 len = arg3;
-    void *key = (void *)arg4;
-    void *iv = (void *)arg5;
-    uint64_t key_len = arg6;
-    uint32_t state[8] = {0};
-    u64 ret;
+	void *src = (void *)arg1;
+	void *dst = (void *)arg2;
+	u64 len = arg3;
+	void *key = (void *)arg4;
+	void *iv = (void *)arg5;
+	uint64_t key_len = arg6;
+	uint32_t state[8] = {0};
+	u64 ret;
 
-    // 参数检查和缓存操作
-    inv_dcache_range((uintptr_t)src, len);
-    inv_dcache_range((uintptr_t)key, key_len);
-    inv_dcache_range((uintptr_t)iv, 16);
+	inv_dcache_range((uintptr_t)src, len);
+	inv_dcache_range((uintptr_t)key, key_len);
+	inv_dcache_range((uintptr_t)iv, 16);
 
-    // 从arg7解析配置
-    E_MODE mode = (arg7) & 0x3;
-    E_KEY_MODE key_mode = (arg7 >> 2) & 0x3;
-    int isEncrypt = ((arg7 >> 4) & 0x1)==0?1:0;
+	E_MODE mode = (arg7) & 0x3;
+	E_KEY_MODE key_mode = (arg7 >> 2) & 0x3;
+	int isEncrypt = ((arg7 >> 4) & 0x1) == 0 ? 1 : 0;
+	int key_source = ((arg7 >> 5) & 0x1);
 
-    // 调用新接口
-    ret = plat_cryptodma_do(isEncrypt, (uintptr_t)src, (uintptr_t)dst, len,
-                           key, key_mode, iv, AES, mode, state,USE_DES_KEY);
+	ret = plat_cryptodma_do(isEncrypt, (uintptr_t)src, (uintptr_t)dst, len,
+				key, key_mode, iv, AES, mode, state, key_source);
 
-    return bmsp_set_smc_args(TEESMC_OPTEED_RETURN_CALL_DONE, len, 0, 0, 0, 0, 0, ret);
+	return bmsp_set_smc_args(TEESMC_OPTEED_RETURN_CALL_DONE, len, 0, 0, 0, 0, 0, ret);
 }
 
 // SM3接口修改
