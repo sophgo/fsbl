@@ -4,14 +4,17 @@
 #include <assert.h>
 #include <errno.h>
 #include <bl_common.h>
+#include <bl2.h>
 #include <platform.h>
 #include <delay_timer.h>
 #include <console.h>
 #include <string.h>
 #include <rom_api.h>
+#include <ddr_sys.h>
 
 #include "ddr_pkg_info.h"
 #include "rtc.h"
+extern enum CHIP_CLK_MODE chip_clk_mode;
 
 void panic_handler(void)
 {
@@ -416,9 +419,9 @@ void sys_pll_nd(int vc_overdrive)
 	NOTICE("PLLE.\n");
 }
 
-void sys_pll_init(enum CHIP_CLK_MODE mode)
+void sys_pll_init(void)
 {
-	switch (mode) {
+	switch (chip_clk_mode) {
 	case CLK_VC_OD:
 		sys_pll_nd(1);
 		break;
@@ -433,19 +436,104 @@ void sys_pll_init(enum CHIP_CLK_MODE mode)
 
 }
 
+#ifndef NO_DDR_CFG //for fpga
+static void *get_warmboot_entry(void)
+{
+// the WARM_BOOT state can be used for WDG reset test
+#define WANTED_STATE SYS_RESUME
+
+	/* Check if RTC state changed from ST_SUSP */
+	if ((mmio_read_32(REG_RTC_ST_ON_REASON) & 0xF) == WANTED_STATE)
+		return (void *)(uintptr_t)mmio_read_32(RTC_SRAM_FLAG_ADDR);
+
+	return 0;
+}
+#endif
+void rtc_set_ddr_pwrok(void)
+{
+	mmio_setbits_32(REG_RTC_BASE + RTC_PG_REG, 0x00000001);
+}
+
+void rtc_set_rmio_pwrok(void)
+{
+	mmio_setbits_32(REG_RTC_BASE + RTC_PG_REG, 0x00000002);
+}
+
+#ifdef NO_DDR_CFG //for fpga
+static void ddr_resume(void) {}
+#else
+static void ddr_resume(void)
+{
+	rtc_set_ddr_pwrok();
+	rtc_set_rmio_pwrok();
+	ddr_sys_resume();
+}
+#endif
+
+static void blcp_2nd_c906l_reset(struct fip_param2 *fip_param2)
+{
+	uint32_t rtos_base;
+
+	if (!fip_param2->blcp_2nd_runaddr)
+		return;
+
+	rtos_base = mmio_read_32(AXI_SRAM_RTOS_BASE);
+	if (rtos_base != CVI_RTOS_MAGIC_CODE) {
+		INFO("WE_0x%x\n", fip_param2->blcp_2nd_runaddr);
+		reset_c906l(fip_param2->blcp_2nd_runaddr);
+	}
+}
+
+void jump_to_warmboot_entry(void)
+{
+	void (*warmboot_entry)() = get_warmboot_entry();
+	struct fip_param1 *fip_param1 = (void *)PARAM1_BASE;
+	struct fip_param2 fip_param2 __aligned(BLOCK_SIZE);
+
+	// treat next reset as normal boot
+	mmio_write_64(RTC_SRAM_FLAG_ADDR, 0);
+	if (warmboot_entry) {
+		INFO("WE=0x%lx\n", (uintptr_t)warmboot_entry);
+
+		if (p_rom_api_load_image(&fip_param2,
+		    fip_param1->param2_loadaddr,
+		    PARAM2_SIZE, 0) < 0) {
+			fip_param2.blcp_2nd_runaddr = 0;
+			ERROR("param2 load fail\n");
+		}
+
+		NOTICE("ddr resume...\n");
+		ddr_resume();
+		NOTICE("ddr resume end\n");
+
+		sys_pll_init();
+		sys_switch_all_to_pll();
+
+		blcp_2nd_c906l_reset(&fip_param2);
+#ifdef AARCH64
+		disable_mmu_icache_el3();
+		__asm__ volatile("tlbi alle3\n");
+#endif
+		warmboot_entry();
+	}
+}
+
 void switch_rtc_mode_1st_stage(void)
 {
 	uint32_t read_data;
 	uint32_t write_data;
 	uint32_t rtc_mode;
 
-#ifdef CV181X_SUPPORT_SUSPEND_RESUME
+#ifdef AARCH64
 	void (*warmboot_entry)(void) = get_warmboot_entry();
 
 	if (warmboot_entry == (void *)BL31_WARMBOOT_ENTRY)
 		return;
 #endif
 
+#ifdef CONFIG_SUSPEND
+	return;
+#endif
 	// reg_rtc_mode = rtc_ctrl0[10]
 	read_data = mmio_read_32(REG_RTC_CTRL_BASE + RTC_CTRL0);
 	rtc_mode = (read_data >> 10) & 0x1;
@@ -482,6 +570,7 @@ void switch_rtc_mode_1st_stage(void)
 	// reg_clk32k_cg_en = rtc_ctrl0[11] -> 1
 	write_data = 0x0C000000 | (read_data & 0xffffffff) | (0x1 << 11);
 	mmio_write_32(REG_RTC_CTRL_BASE + RTC_CTRL0, write_data); //rtc_ctrl0
+	NOTICE("Switch RTC mode to xtal32k\n");
 }
 
 void switch_rtc_mode_2nd_stage(void)

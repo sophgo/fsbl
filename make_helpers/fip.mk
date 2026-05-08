@@ -23,6 +23,12 @@ MONITOR_A_PATH = ./fw_dynamic.bin
 LOADER_2ND_A_PATH = ./u-boot-raw.bin
 endif
 
+ifeq (${CONFIG_ENABLE_BURN_BUTTON},y)
+LOADER_2ND_PATH_B=${UBOOT_PATH}/${UBOOT_OUTPUT_FOLDER}/u-boot-raw.bin
+else
+LOADER_2ND_PATH_B=
+endif
+
 fip%: export BLCP_IMG_RUNADDR=0x05200200
 fip%: export BLCP_PARAM_LOADADDR=0
 fip%: export NAND_INFO=00000000
@@ -103,7 +109,8 @@ fip-all: fip-dep
 		--doublesdk='${DOUBLESDK}'\
 		--FREERTOS_A='${FREERTOS_A_PATH}' \
 		--MONITOR_A='${MONITOR_A_PATH}'\
-		--LOADER_2ND_A='${LOADER_2ND_A_PATH}'
+		--LOADER_2ND_A='${LOADER_2ND_A_PATH}' \
+		--LOADER_2ND_B='${LOADER_2ND_PATH_B}'
 	${Q}echo "  [LS] " $$(ls -l '${BUILD_PLAT}/fip.bin')
 else
 fip-all: fip-dep
@@ -128,6 +135,7 @@ fip-all: fip-dep
 		--doublesdk='${DOUBLESDK}'\
 		--FREERTOS_A='${FREERTOS_A_PATH}' \
 		--MONITOR_A='${MONITOR_A_PATH}'\
-		--LOADER_2ND_A='${LOADER_2ND_A_PATH}'
+		--LOADER_2ND_A='${LOADER_2ND_A_PATH}' \
+		--LOADER_2ND_B='${LOADER_2ND_PATH_B}'
 	${Q}echo "  [LS] " $$(ls -l '${BUILD_PLAT}/fip.bin')
 endif

@@ -471,7 +471,12 @@ void set_rtc_en_registers(void)
 	mmio_write_32(REG_RTC_BASE + RTC_EN_WDT_RST_REQ, 0x01);
 	while (mmio_read_32(REG_RTC_BASE + RTC_EN_WDT_RST_REQ) != 0x01)
 		;
-	mmio_setbits_32(REG_RTC_CTRL_BASE + RTC_POR_RST_CTRL, 0X1);
+#ifdef CONFIG_SUSPEND
+	// Set rtcsys_rst_ctrl[24] = 1; bit 24 is reg_rtcsys_reset_en
+	mmio_write_32(REG_RTC_CTRL_BASE + RTC_POR_RST_CTRL, 0X2);
+#else
+	mmio_write_32(REG_RTC_CTRL_BASE + RTC_POR_RST_CTRL, 0X1);
+#endif
 	mmio_write_32(REG_RTC_CTRL_BASE + RTC_CTRL0_UNLOCKKEY, 0xAB18);
 	write_data = mmio_read_32(REG_RTC_CTRL_BASE + RTC_CTRL0);
 	write_data = 0xffff0000 | write_data | (0x1 << 11) | (0x01 << 6);

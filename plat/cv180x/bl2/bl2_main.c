@@ -95,7 +95,7 @@ void init_macros(void)
 	macros_misc.bl_pq_runaddr = BL_PQ_RUNADDR;
 	macros_misc.bl_pq_loadaddr = BL_PQ_LOADADDR;
 	macros_misc.bl_pq_size = BL_PQ_SIZE;
-	macros_misc.bl_decomp_buf_addr = DECOMP_BUF_ADDR; 
+	macros_misc.bl_decomp_buf_addr = DECOMP_BUF_ADDR;
 #ifdef	BOOT_FROM_NAND
 	macros_misc.storage_type = BOOT_SRC_SPI_NAND;
 #endif
@@ -200,7 +200,9 @@ void bl2_main(void)
 
 	setup_dl_flag();
 
+#ifdef SWITCH_32K_XTAL
 	switch_rtc_mode_1st_stage();
+#endif
 
 	set_rtc_en_registers();
 
@@ -225,9 +227,14 @@ void bl2_main(void)
 	chip_clk_mode = CLK_VC_OD;
 #endif
 #endif
+
+#ifdef CONFIG_SUSPEND
+#ifndef NO_DDR_CFG //for fpga
+	jump_to_warmboot_entry();
+#endif
+#endif
 	load_ddr();
 	init_param_memory();
-
 #ifdef DOUBLESDK
 	load_rest_doublesdk();
 #else

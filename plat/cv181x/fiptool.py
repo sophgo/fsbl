@@ -223,10 +223,15 @@ class FIP:
             Entry.make("LOADER_2ND_A_LOADADDR", 4, int),
             Entry.make("LOADER_2ND_A_RESERVED1", 4, int),
             Entry.make("LOADER_2ND_A_RESERVED2", 4, int),
+            # u-boot_B
+            Entry.make("LOADER_2ND_B_RESERVED0", 4, int),
+            Entry.make("LOADER_2ND_B_LOADADDR", 4, int),
+            Entry.make("LOADER_2ND_B_SIZE", 4, int),
+            Entry.make("LOADER_2ND_B_RESERVED2", 4, int),
 
             # Reserved
             Entry.make("BLCP_2ND_INDEPENDENT", 4, int),
-            Entry.make("RESERVED_LAST", 4096 - 16 * 9 - 4, bytes),
+            Entry.make("RESERVED_LAST", 4096 - 16 * 10 - 4, bytes),
         ]
     )
 
@@ -240,6 +245,7 @@ class FIP:
             Entry.make("FREERTOS_A", None, bytes),
             Entry.make("MONITOR_A", None, bytes),
             Entry.make("LOADER_2ND_A", None, bytes),
+            Entry.make("LOADER_2ND_B", None, bytes),
         ]
     )
 
@@ -583,6 +589,15 @@ class FIP:
 
         return fip_bin + ddr_param
 
+    def add_loader_2nd_b(self, args):
+        if args.LOADER_2ND_B == "":
+            return
+        with open(args.LOADER_2ND_B, "rb") as fp:
+            loader_2nd_b = fp.read()
+
+        logging.debug("loader_2nd_b=%#x bytes", len(loader_2nd_b))
+        self.body2["LOADER_2ND_B"].content = loader_2nd_b
+
     def pack_blcp_2nd(self, fip_bin, blcp_2nd_runaddr, sign_flag=False):
         logging.debug("pack_blcp_2nd:")
         if not len(self.body2["BLCP_2ND"].content):
@@ -611,6 +626,23 @@ class FIP:
             logging.info("C906L_PARTITION_EXIST is false, yoc packed in fip")
             self.param2["BLCP_2ND_INDEPENDENT"].content = 0
             return fip_bin + body
+
+    def pack_loader_2nd_b(self, fip_bin):
+        logging.debug("pack_loader_2nd_b:")
+        if not len(self.body2["LOADER_2ND_B"].content):
+            return
+
+        fip_bin = self.pad(fip_bin, IMAGE_ALIGN)
+
+        # Append LOADER_2ND_B to body2
+        loader_2nd_b = self.pad(self.body2["LOADER_2ND_B"].content, IMAGE_ALIGN)
+
+        logging.debug("pack_loader_2nd_b:LOADER_2ND_B_LOADADDR=%d, LOADER_2ND_B_SIZE=%d ", len(fip_bin), len(loader_2nd_b))
+
+        self.param2["LOADER_2ND_B_LOADADDR"].content = len(fip_bin)
+        self.param2["LOADER_2ND_B_SIZE"].content = len(loader_2nd_b)
+
+        return fip_bin + loader_2nd_b
 
     def pack_monitor(self, fip_bin, monitor_runaddr):
         logging.debug("pack_monitor:")
@@ -647,9 +679,9 @@ class FIP:
         self.param2["FREERTOS_A_SIZE"].content = len(body)
         self.param2["FREERTOS_A_LOADADDR"].content = len(fip_bin)
         self.param2["FREERTOS_A_RUNADDR"].content = runaddr
-        
+
         blcp_2nd_independent = self.param2["BLCP_2ND_INDEPENDENT"].toint()
-        
+
         if (sign_flag == True and blcp_2nd_independent == 1) or os.getenv("C906L_PARTITION_EXIST") == '1' :
             logging.info("C906L_PARTITION_EXIST is true, freertos packed independented")
             self.param2["BLCP_2ND_INDEPENDENT"].content = 1
@@ -867,7 +899,10 @@ class FIP:
 
         if len(self.body2["LOADER_2ND"].content):
             fip_bin = self.pack_loader_2nd(fip_bin)
-        
+
+        if len(self.body2["LOADER_2ND_B"].content):
+            fip_bin = self.pack_loader_2nd_b(fip_bin)
+
         if sign_flag==True or args.doublesdk:
             if len(self.body2["FREERTOS_A"].content):
                 runaddr = self.param2["FREERTOS_A_RUNADDR"].toint()
@@ -914,20 +949,20 @@ class FIP:
             body1_start += content_size
         
         fip_bin = self.append_fip2(fip_bin, args, sign_flag)
-        
+
         logging.debug("=== Final FIP after append_fip2 ===")
         logging.debug("Total FIP size: %d bytes", len(fip_bin))
-        
+
         param2_offset = self.param1["PARAM2_LOADADDR"].toint()
         param2_data = fip_bin[param2_offset:param2_offset + PARAM2_SIZE]
         logging.debug("PARAM2 offset=%d, content=%s", 
                     param2_offset, param2_data[:64].hex())
-        
+
         for name, entry in self.param2.items():
             if entry.content:
                 logging.debug("PARAM2 %s: size=%d bytes, content=%s", 
                             name, len(entry.content), entry.content[:16].hex())
-        
+
         logging.info("generated fip_bin is %d bytes", len(fip_bin))
 
         if getattr(self, "rest_fip", None):
@@ -951,6 +986,7 @@ METHODS = {
     "FREERTOS_A": FIP.add_freertos_A,
     "MONITOR_A": FIP.add_monitor_A,
     "LOADER_2ND_A": FIP.add_loader_2nd_A,
+    "LOADER_2ND_B": FIP.add_loader_2nd_b,
 }
 
 

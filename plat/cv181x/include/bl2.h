@@ -39,7 +39,11 @@ struct fip_param2 {
 	uint32_t loader_2nd_a_loadaddr;
 	uint32_t loader_2nd_a_reserved1;
 	uint32_t loader_2nd_a_reserved2;
-	uint8_t reserved4[3952];
+	uint32_t loader_2nd_b_reserved0;
+	uint32_t loader_2nd_b_loadaddr;
+	uint32_t loader_2nd_b_size;
+	uint32_t loader_2nd_b_reserved2;
+	uint8_t reserved4[3936];
 } __packed;
 
 struct loader_2nd_header {

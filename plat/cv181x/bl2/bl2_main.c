@@ -8,8 +8,10 @@
 #include <rom_api.h>
 #include <rtc.h>
 #include "cvi_spinor.h"
+#include <cpu.h>
 
 struct _macros_misc macros_misc;
+enum CHIP_CLK_MODE chip_clk_mode = CLK_ND;
 
 #ifdef DOUBLESDK
 char boot_flag_A;
@@ -189,7 +191,6 @@ void check_spi_nor(void)
 
 void bl2_main(void)
 {
-	enum CHIP_CLK_MODE mode;
 	ATF_STATE = ATF_STATE_BL2_MAIN;
 	time_records->fsbl_start = read_time_ms();
 	NOTICE("\nFSBL %s:%s\n", version_string, build_message);
@@ -220,9 +221,9 @@ void bl2_main(void)
 #endif
 
 	setup_dl_flag();
-
+#ifdef SWITCH_32K_XTAL
 	switch_rtc_mode_1st_stage();
-
+#endif
 	set_rtc_en_registers();
 
 #ifdef FORCE_BOOT_FROM_FLASH
@@ -239,21 +240,25 @@ void bl2_main(void)
 	}
 #endif
 
-	load_ddr();
-	init_param_memory();
 #ifdef OD_CLK_SEL
-	mode = CLK_OD;
+	chip_clk_mode = CLK_OD;
 #else
 #ifdef VC_CLK_OVERDRIVE
-	mode = CLK_VC_OD;
-#else
-	mode = CLK_ND;
+	chip_clk_mode = CLK_VC_OD;
 #endif
 #endif
+
+#ifdef CONFIG_SUSPEND
+#ifndef NO_DDR_CFG //for fpga
+	jump_to_warmboot_entry();
+#endif
+#endif
+	load_ddr();
+	init_param_memory();
 #ifdef DOUBLESDK
 	load_rest_doublesdk(mode);
 #else
-	load_rest(mode);
+	load_rest();
 #endif
 	NOTICE("BL2 end.\n");
 

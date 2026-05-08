@@ -472,7 +472,7 @@ retry_from_flash:
 	sync_cache();
 	console_flush();
 
-	switch_rtc_mode_2nd_stage();
+	// switch_rtc_mode_2nd_stage();
 
 	if (monitor_entry) {
 		NOTICE("Jump to monitor at 0x%lx.\n", monitor_entry);

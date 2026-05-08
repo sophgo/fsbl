@@ -41,8 +41,19 @@
 
 #define UPDATED 0x12345678
 #define NO_UPDATE 0x87654321
+
+/*
+ * "FSM state change to ST_ON from the state
+ * 4'h0 = state changed from ST_OFF to ST_ON
+ * 4'h3 = state changed to ST_PWR_CYC or ST_WARM_RESET then back to ST_ON
+ * 4'h9 = state changed from ST_SUSP to ST_ON
+ */
 #define COLD_BOOT 0x0
 #define WARM_BOOT 0x3
+#define SYS_RESUME 0x9
+
+#define CVI_SAPD_FLAG 0x53415044
+#define MCU_FLAG 0x8051
 
 #define REG_RTC_ST_ON_REASON (REG_RTC_BASE + RTC_ST_ON_REASON)
 
@@ -51,4 +62,11 @@
 #define RTC_INTERNAL_32K 0
 #define RTC_EXTERNAL_32K 1
 
+#define PLAT_BM_TRUSTED_MAILBOX_BASE	0x0E000008
+#define PLAT_BM_TRUSTED_MAILBOX_SIZE	8
+
+#define RTC_SRAM_FLAG_ADDR		(RTC_CORE_SRAM_BASE + RTC_CORE_SRAM_SIZE - 8)
+#define RTC_SRAM_TRUSTED_MAILBOX_BASE	(RTC_SRAM_FLAG_ADDR - PLAT_BM_TRUSTED_MAILBOX_SIZE)
+
+#define BL31_WARMBOOT_ENTRY 0x80000040
 #endif /* __RTC_H__ */
