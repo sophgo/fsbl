@@ -785,6 +785,7 @@ extern struct _time_records *time_records;
 #define TOGGLE_SSC_ENABLE (0x1 << 1)
 #define SET_SSC_SYN_BYPASS (0x1 << 4)
 #define REG_PLL_G2_CTRL (PLL_G2_BASE + 0x0)
+#define REG_PLL_G2_STATUS (PLL_G2_BASE + 0x4)
 #define REG_APLL0_CSR (PLL_G2_BASE + 0x0C)
 #define REG_DISPPLL_CSR (PLL_G2_BASE + 0x10)
 #define REG_CAM0PLL_CSR (PLL_G2_BASE + 0x14)
@@ -806,6 +807,7 @@ extern struct _time_records *time_records;
 #define G6_DIV_SEL_MASK		(0x7FU << 17)
 #define G6_DIV_SEL_SHIFT	17
 #define REG_PLL_G6_CTRL		(PLL_G6_BASE + 0x0)
+#define REG_PLL_G6_STATUS   (PLL_G6_BASE + 0x4)
 #define REG_TPLL_CSR		(PLL_G6_BASE + 0x0C)
 #define REG_APPLL_CSR		(PLL_G6_BASE + 0x14)
 #define REG_RVPLL_CSR		(PLL_G6_BASE + 0x18)

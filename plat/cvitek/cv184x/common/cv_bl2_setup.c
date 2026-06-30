@@ -157,40 +157,68 @@ void sys_pll_init_od(void)
 {
 	NOTICE("ODS.\n");
 	uint32_t val = 0, div_sel_val = 0;
-	//0.set VDDC
-	config_core_power(0x9);
+	//0.set VDDC based on OD configuration
+#if (defined(CPU_OD_CLK_BIG) || defined(CPU_OD_CLK_LITTLE)) && defined(TPU_OD_CLK_SEL)
+	config_core_power(0x09);  // 1.02V (both CPU and TPU overdriven)
+#else
+	config_core_power(0x19);  // 0.95V (only CPU or only TPU overdriven)
+#endif
 	//1.switch pll to xtal(bypass mode)
 	mmio_write_32(REG_CLK_BYP_H104, 0xFFFFFFFF);
 	// clk_uart0 stay in pll mode or bypass mode to keep console working
 	mmio_setbits_32(REG_CLK_BYP_H108, 0xFFF7FFFF);
 	mmio_write_32(REG_CLK_BYP_H10C, 0xFFFFFFFF);
 
-#ifdef CPU_OD_CLK_SEL
+	/*
+	 * APPLL (big core) frequency selection:
+	 *
+	 * | CPU_OD_CLK_BIG | CPU_OD_CLK_1000M | APPLL     |
+	 * |:--------------:|:----------------:|-----------|
+	 * |       y        |        n         | 1100MHz   |
+	 * |       y        |        y         | 1000MHz   |
+	 * |       n        |        -         | 800MHz    |
+	 *
+	 * RVPLL (little core): 1600MHz when CPU_OD_CLK_LITTLE=y
+	 * TPLL: always 1500MHz for both OD and non-OD configurations
+	 */
 	//2.set tpll/appll/rvpll *_pll_csr to OD mode
 	//set div_sel bit17-23
-	div_sel_val = 60;	//1500MHz
-	val = mmio_read_32(REG_TPLL_CSR);
-	val = (val & ~G6_DIV_SEL_MASK) | ((div_sel_val << G6_DIV_SEL_SHIFT) & G6_DIV_SEL_MASK);
-	mmio_write_32(REG_TPLL_CSR, val);
+	/*
+	 * Current design requires TPLL to be 1500MHz for both OD
+	 * and non-OD configurations, so the TPLL CSR programming
+	 * below is not needed. If the OD TPLL frequency needs to
+	 * be adjusted in the future, uncomment and set div_sel_val
+	 * to the appropriate divider.
+	 */
+	// div_sel_val = 60;	//1500MHz
+	// val = mmio_read_32(REG_TPLL_CSR);
+	// val = (val & ~G6_DIV_SEL_MASK) | ((div_sel_val << G6_DIV_SEL_SHIFT) & G6_DIV_SEL_MASK);
+	// mmio_write_32(REG_TPLL_CSR, val);
 
-	div_sel_val = 44;	//1100MHz
+#ifdef CPU_OD_CLK_BIG
+#ifdef CPU_OD_CLK_1000M
+	div_sel_val = 40; //1000MHz (25MHz * 40)
+#else
+	div_sel_val = 44; //1100MHz (25MHz * 44)
+#endif
+#else
+	div_sel_val = 32; //800MHz (25MHz * 32)
+#endif
 	val = mmio_read_32(REG_APPLL_CSR);
 	val = (val & ~G6_DIV_SEL_MASK) | ((div_sel_val << G6_DIV_SEL_SHIFT) & G6_DIV_SEL_MASK);
 	mmio_write_32(REG_APPLL_CSR, val);
 
+#ifdef CPU_OD_CLK_LITTLE
 	div_sel_val = 64;	//1600MHz
 	val = mmio_read_32(REG_RVPLL_CSR);
 	val = (val & ~G6_DIV_SEL_MASK) | ((div_sel_val << G6_DIV_SEL_SHIFT) & G6_DIV_SEL_MASK);
 	mmio_write_32(REG_RVPLL_CSR, val);
+#endif
 
 	//3.clear *_pll_pwd reg
 	val = mmio_read_32(REG_PLL_G6_CTRL);
 	val = val & (~0x00011111);
 	mmio_write_32(REG_PLL_G6_CTRL, val); //clear all pll PD
-#else
-	val = 0;
-	div_sel_val = 0;
-#endif
 
 #ifdef TPU_OD_CLK_SEL
 	//set clk_tpu_gdma src from tpll to cam0pll
@@ -225,6 +253,20 @@ void sys_pll_init(void)
 	mmio_write_32(0x030002d0, mmio_read_32(0x030002d0) | 0x200); //enable pwm
 #ifdef OD_CLK_SEL
 	sys_pll_init_od();
+#else
+	// set VDDC to 0.90V
+	config_core_power(0x24);
+
+	//1.switch pll to xtal(bypass mode)
+	mmio_write_32(REG_CLK_BYP_H104, 0xFFFFFFFF);
+	// clk_uart0 stay in pll mode or bypass mode to keep console working
+	mmio_setbits_32(REG_CLK_BYP_H108, 0xFFF7FFFF);
+	mmio_write_32(REG_CLK_BYP_H10C, 0xFFFFFFFF);
+
+	// Set APPLL to 800MHz (25MHz * 32)
+	uint32_t val = mmio_read_32(REG_APPLL_CSR);
+	val = (val & ~G6_DIV_SEL_MASK) | ((32 << G6_DIV_SEL_SHIFT) & G6_DIV_SEL_MASK);
+	mmio_write_32(REG_APPLL_CSR, val);
 #endif
 	//trigger pll G2
 	//a0pll sw update
@@ -265,6 +307,11 @@ void sys_pll_init(void)
 	console_flush();
 	console_uninit();
 
+	//wait for pll lock
+	while ((mmio_read_32(REG_PLL_G2_STATUS) & 0x1f0000) != 0x1f0000)
+		udelay(10);
+	while ((mmio_read_32(REG_PLL_G6_STATUS) & 0x1f0000) != 0x1f0000)
+		udelay(10);
 	// bypass
 	mmio_write_32(REG_CLK_BYP_H104, 0);
 	mmio_clrbits_32(REG_CLK_BYP_H108,
@@ -317,7 +364,7 @@ static void blcp_2nd_c906l_reset(struct fip_param2 *fip_param2)
 
 	rtos_base = mmio_read_32(AXI_SRAM_RTOS_BASE);
 	if (rtos_base != CVI_RTOS_MAGIC_CODE) {
-		INFO("WE_0x%x\n", fip_param2->blcp_2nd_runaddr);
+		INFO("WE_0x%lx\n", fip_param2->blcp_2nd_runaddr);
 		reset_c906l(fip_param2->blcp_2nd_runaddr);
 	}
 }

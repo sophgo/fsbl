@@ -339,6 +339,7 @@ static void dw_spi_stop_mem_op(void)
 {
 	spi_enable_chip(0);
 	dw_spi_set_cs(0);
+	udelay(50);
 	spi_enable_chip(1);
 }
 

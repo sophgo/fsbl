@@ -14,10 +14,10 @@ struct fip_param2 {
 	uint32_t blcp_2nd_cksum;
 	uint32_t blcp_2nd_comp_type;
 	uint32_t blcp_2nd_comp_size;
-	uint32_t blcp_2nd_comp_addr;
-	uint32_t blcp_2nd_loadaddr;
+	uint64_t blcp_2nd_comp_addr;
+	uint64_t blcp_2nd_loadaddr;
 	uint32_t blcp_2nd_size;
-	uint32_t blcp_2nd_runaddr;
+	uint64_t blcp_2nd_runaddr;
 	uint32_t monitor_cksum;
 	uint64_t monitor_loadaddr;
 	uint32_t monitor_size;
@@ -38,7 +38,7 @@ struct fip_param2 {
 	uint32_t loader_2nd_b_loadaddr;
 	uint32_t loader_2nd_b_size;
 	uint32_t loader_2nd_b_reserved2;
-	uint8_t reserved4[3924];
+	uint8_t reserved4[3912];
 } __packed;
 
 struct loader_2nd_header {
@@ -51,10 +51,23 @@ struct loader_2nd_header {
 	uint32_t reserved2;
 } __packed;
 
+struct blcp_2nd_header {
+	uint32_t blcp_2nd_magic;
+	uint32_t blcp_2nd_cksum;
+	uint32_t blcp_2nd_comp_type;
+	uint32_t blcp_2nd_comp_size;
+	uint64_t blcp_2nd_comp_addr;
+	uint64_t blcp_2nd_loadaddr;
+	uint32_t blcp_2nd_size;
+	uint64_t blcp_2nd_runaddr;
+	uint8_t blcp_2nd_reserved[(512 - 4 * 5 - 8 * 3)];
+} __packed;
 #define PARAM2_SIZE 0x1000
 
 #define LOADER_2ND_MAGIC_RAW 0x20203342 // "B3  "
 #define LOADER_2ND_MAGIC_LZMA 0x414d3342 // "B3MA"
 #define LOADER_2ND_MAGIC_LZ4 0x345a3342 // "B3Z4"
+
+#define BLCP_2ND_MAGIC 0x42434f59 // "YOCB"
 
 #endif /* __BL2_H__ */

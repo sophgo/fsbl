@@ -13,12 +13,16 @@
 #include <spinand/cvi_spinand.h>
 #include <emmc/emmc.h>
 #include <cvipart.h>
+#include <stdbool.h>
 #if defined(CONFIG_BOARD_palladium)
 #include <ddr_sys_bring_up_pld.h>
 #elif defined(CONFIG_BOARD_fpga)
 #else
 	#include <ddr.h>
 #endif
+
+// 512 up align
+#define ALIGN_TO_BLOCK_SIZE(size)  (((size) + BLOCK_SIZE - 1) / BLOCK_SIZE * BLOCK_SIZE)
 
 struct rom_api p_rom_api = {
 	.get_boot_src = (void *)0x0000000004400020,
@@ -41,6 +45,7 @@ static union {
 	#if !defined(CONFIG_BOARD_palladium) && !defined(CONFIG_BOARD_fpga)
 	struct ddr_param ddr_param;
 	#endif
+	struct blcp_2nd_header blcp_2nd_header;
 	struct loader_2nd_header loader_2nd_header;
 	uint8_t buf[BLOCK_SIZE];
 } sram_union_buf __aligned(BLOCK_SIZE);
@@ -157,7 +162,7 @@ int load_data_from_storage(void *buffer, uint32_t offset, uint32_t size,
 			ret = emmc_read_blocks(offset / 512, (uintptr_t)buffer, size);
 		}
 	} else if (p_rom_api.get_boot_src() == BOOT_SRC_SPI_NOR) {
-		cv_dw_spinor_read(buffer, offset, size);
+		ret = cv_dw_spinor_read(buffer, offset, size);
 	} else if (p_rom_api.get_boot_src() == BOOT_SRC_SPI_NAND && (!is_read_fip_partition)) {
 		static int count;
 
@@ -170,8 +175,8 @@ int load_data_from_storage(void *buffer, uint32_t offset, uint32_t size,
 	}
 
 	// uint64_t data = *(uint64_t *)(uintptr_t)buffer;
-
-	NOTICE("\nthe first 8 bytes data is(ret:%d):0x%lx\n", ret, *(uint64_t *)(uintptr_t)buffer);
+	INFO("storage:(ret:%d)(%p, 0x%x, 0x%x, %d, 0x%lx)\n",
+	     ret, buffer, offset, size, retry, *(uint64_t *)(uintptr_t)buffer);
 	return ret;
 }
 
@@ -188,7 +193,7 @@ int load_param2(int retry)
 											PARAM2_SIZE, retry);
 #endif
 	if (ret < 0) {
-		ERROR("load data failed! loadaddr:0x%x, size:%d, retry:%d\n",
+		ERROR("load param2 failed! loadaddr:0x%x, size:%d, retry:%d\n",
 			  fip_param1->param2_loadaddr, PARAM2_SIZE, retry);
 		return ret;
 	}
@@ -263,65 +268,58 @@ retry_from_flash:
 }
 
 
-static int check_blcp_2nd_header(struct fip_param2 _param2)
+static int check_blcp_2nd_header(struct blcp_2nd_header *header)
 {
-#if !(defined(RTOS_ENABLE_FREERTOS) || defined(RTOS_ENABLE_RTT))
-	if (!_param2.blcp_2nd_runaddr) {
+	if (!header->blcp_2nd_runaddr) {
 		NOTICE("No C906L image.\n");
 		return 1;
 	}
 
-	if (!IN_RANGE(_param2.blcp_2nd_runaddr, DRAM_BASE, DRAM_SIZE)) {
-		ERROR("blcp_2nd_runaddr (0x%x) is not in DRAM.\n", fip_param2.blcp_2nd_runaddr);
+	if (!IN_RANGE(header->blcp_2nd_runaddr, DRAM_BASE, DRAM_SIZE)) {
+		ERROR("blcp_2nd_runaddr (0x%lx) is not in DRAM.\n", header->blcp_2nd_runaddr);
 		plat_panic_handler();
 	}
 
-	if (!IN_RANGE(_param2.blcp_2nd_runaddr + _param2.blcp_2nd_size, DRAM_BASE, DRAM_SIZE)) {
-		ERROR("blcp_2nd_size (0x%x) is not in DRAM.\n", _param2.blcp_2nd_size);
+	if (!IN_RANGE(header->blcp_2nd_runaddr + header->blcp_2nd_size, DRAM_BASE, DRAM_SIZE)) {
+		ERROR("blcp_2nd_size (0x%x) is not in DRAM.\n", header->blcp_2nd_size);
 		plat_panic_handler();
 	}
 
-	switch (fip_param2.blcp_2nd_comp_type) {
+	switch (header->blcp_2nd_comp_type) {
 	case LOADER_2ND_MAGIC_LZMA:
-		fip_param2.blcp_2nd_comp_type = COMP_LZMA;
+		header->blcp_2nd_comp_type = COMP_LZMA;
 		break;
 	case LOADER_2ND_MAGIC_LZ4:
-		fip_param2.blcp_2nd_comp_type = COMP_LZ4;
+		header->blcp_2nd_comp_type = COMP_LZ4;
 		break;
 	default:
-		fip_param2.blcp_2nd_comp_type = COMP_NONE;
+		header->blcp_2nd_comp_type = COMP_NONE;
 		break;
 	}
-#else
-	fip_param2.blcp_2nd_comp_type = COMP_NONE;
-#endif
-	if (fip_param2.blcp_2nd_comp_type <= COMP_NONE && fip_param2.blcp_2nd_comp_type >= COMP_MAX) {
-		if (!IN_RANGE(_param2.blcp_2nd_comp_addr, DRAM_BASE, DRAM_SIZE)) {
-			ERROR("blcp_2nd_comp_addr (0x%x) is not in DRAM.\n", fip_param2.blcp_2nd_comp_addr);
+
+	if (header->blcp_2nd_comp_type <= COMP_NONE && header->blcp_2nd_comp_type >= COMP_MAX) {
+		if (!IN_RANGE(header->blcp_2nd_comp_addr, DRAM_BASE, DRAM_SIZE)) {
+			ERROR("blcp_2nd_comp_addr (0x%lx) is not in DRAM.\n", header->blcp_2nd_comp_addr);
 			plat_panic_handler();
 		}
 
-		if (!IN_RANGE(_param2.blcp_2nd_comp_addr + _param2.blcp_2nd_comp_size, DRAM_BASE, DRAM_SIZE)) {
-			ERROR("blcp_2nd_comp_size (0x%x) is not in DRAM.\n", _param2.blcp_2nd_comp_size);
+		if (!IN_RANGE(header->blcp_2nd_comp_addr + header->blcp_2nd_comp_size, DRAM_BASE, DRAM_SIZE)) {
+			ERROR("blcp_2nd_comp_size (0x%x) is not in DRAM.\n", header->blcp_2nd_comp_size);
 			plat_panic_handler();
 		}
 	}
-#ifdef CONFIG_BOARD_fpga
-		if ((p_rom_api.get_boot_src() == BOOT_SRC_SD
-			|| p_rom_api.get_boot_src() == BOOT_SRC_USB
-			|| p_rom_api.get_boot_src() == BOOT_SRC_UART)
-			&& _param2.blcp_2nd_loadaddr == 0)
-#else
-		if ((p_rom_api.get_boot_src() == BOOT_SRC_SD
-			|| p_rom_api.get_boot_src() == BOOT_SRC_USB
-			|| p_rom_api.get_boot_src() == BOOT_SRC_UART))
+#ifdef SECOND_OFFSET
+	if ((p_rom_api.get_boot_src() == BOOT_SRC_SD
+		|| p_rom_api.get_boot_src() == BOOT_SRC_USB
+		|| p_rom_api.get_boot_src() == BOOT_SRC_UART)
+		&& header->blcp_2nd_loadaddr == SECOND_OFFSET)
+	{
+		NOTICE("Wouldn't boot up RTOS, cause image didn't build in to fip.bin when boot src is SD.\n");
+		return 1;
+	}
 #endif
-        {
-            NOTICE("Wouldn't boot up RTOS, cause image didn't build in to fip.bin when boot src is SD.\n");
-            return 1;
-        }
 
-        return 0;
+	return 0;
 }
 
 int load_user_param_and_logo(int retry)
@@ -342,7 +340,7 @@ int load_user_param_and_logo(int retry)
 									is_read_fip_partition);
 
 	if (ret < 0) {
-		ERROR("load data failed! loadaddr:0x%x, size:%d, retry:%d\n",
+		ERROR("load logo failed! loadaddr:0x%x, size:%d, retry:%d\n",
 			  LOGO_OFFSET, LOGO_SIZE, retry);
 		return ret;
 	}
@@ -366,7 +364,7 @@ int load_user_param_and_logo(int retry)
 										is_read_fip_partition);
 
 		if (ret < 0) {
-			ERROR("load data failed! loadaddr:0x%x, size:%d, retry:%d\n",
+			ERROR("load param failed! loadaddr:0x%x, size:%d, retry:%d\n",
 				  PARAM_OFFSET, PARAM_SIZE, retry);
 			return ret;
 		}
@@ -379,86 +377,135 @@ int load_user_param_and_logo(int retry)
 int load_blcp_2nd(int retry)
 {
 	int ret = -1;
-	// uint32_t crc = 0;
+	uint32_t crc = 0;
 	uint32_t rtos_base = 0;
 	void *image_buf = NULL;
-	uint32_t image_size = 0;
+#ifdef SECOND_OFFSET
+	bool is_build_in_fip = true;
+#endif
+	uint32_t raw_image_size = 0;
+	uint8_t is_read_fip_partition = 1;
+	uint32_t header_size = sizeof(struct blcp_2nd_header);
+	struct blcp_2nd_header *blcp_2nd_header = &sram_union_buf.blcp_2nd_header;
 
-	u_int8_t is_read_fip_partition = 1;
 	// if no blcp_2nd, set release_blcp_2nd previou and change it end of function.
 	time_records->release_blcp_2nd = read_time_ms();
 
-	NOTICE("C2S/0x%x/0x%x/0x%x, 0x%x/0x%x/0x%x.\n",
-		   fip_param2.blcp_2nd_comp_type, fip_param2.blcp_2nd_comp_size, fip_param2.blcp_2nd_comp_addr,
-		   fip_param2.blcp_2nd_loadaddr, fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_size);
+#ifdef SECOND_OFFSET
+	//fip_param2.blcp_2nd_loadaddr == 0, means didn't build in fip.bin.
+	if (!fip_param2.blcp_2nd_loadaddr)
+		is_build_in_fip = false;
 
-	if (check_blcp_2nd_header(fip_param2))
+	if (!is_build_in_fip) {
+		if (p_rom_api.get_boot_src() == BOOT_SRC_SD
+		    || p_rom_api.get_boot_src() == BOOT_SRC_USB
+		    || p_rom_api.get_boot_src() == BOOT_SRC_UART) {
+			// During SD/USB/UART download the host only serves fip.bin, so the
+			// blcp_2nd partition at SECOND_OFFSET is not reachable. Reading it
+			// would request data past the end of fip.bin and hang the download.
+			// Skip it here (same as mars37 v6.2.1); it is loaded from flash on a
+			// normal boot.
+			NOTICE("Wouldn't boot up RTOS, cause image didn't build in to fip.bin when boot src is SD/USB/UART.\n");
+			return 0;
+		} else {
+			if (p_rom_api.get_boot_src() == BOOT_SRC_EMMC
+			    || p_rom_api.get_boot_src() == BOOT_SRC_SPI_NAND)
+				is_read_fip_partition = 0;
+
+			//get the header from the image
+			ret = load_data_from_storage((void *)blcp_2nd_header,
+						     SECOND_OFFSET,
+						     BLOCK_SIZE, retry, is_read_fip_partition);
+			if (ret < 0 || blcp_2nd_header->blcp_2nd_magic != BLCP_2ND_MAGIC) {
+				printf("[%s] load blcp 2nd image failed(ret: %d)(magic: 0x%x)\n",
+				       __func__, ret, blcp_2nd_header->blcp_2nd_magic);
+				return ret;
+			}
+			blcp_2nd_header->blcp_2nd_loadaddr = SECOND_OFFSET;
+		}
+	} else
+#endif
+	{
+		header_size = 0;
+		memcpy((char *)&blcp_2nd_header->blcp_2nd_cksum, (char *)&fip_param2.blcp_2nd_cksum,
+			  (char *)&blcp_2nd_header->blcp_2nd_reserved - (char *)&blcp_2nd_header->blcp_2nd_cksum);
+	}
+
+	NOTICE("C2S/0x%x, 0x%lx/0x%x/0x%lx, 0x%x/0x%x/0x%lx.\n",
+	       blcp_2nd_header->blcp_2nd_cksum,
+	       blcp_2nd_header->blcp_2nd_loadaddr, blcp_2nd_header->blcp_2nd_size,
+	       blcp_2nd_header->blcp_2nd_runaddr,
+	       blcp_2nd_header->blcp_2nd_comp_type, blcp_2nd_header->blcp_2nd_comp_size,
+	       blcp_2nd_header->blcp_2nd_comp_addr);
+
+	if (check_blcp_2nd_header(blcp_2nd_header))
 		return 0;
 
-	if (fip_param2.blcp_2nd_comp_type > COMP_NONE && fip_param2.blcp_2nd_comp_type < COMP_MAX) {
-		image_buf = (void *)(uintptr_t)fip_param2.blcp_2nd_comp_addr;
-		image_size = fip_param2.blcp_2nd_comp_size;
+	if (blcp_2nd_header->blcp_2nd_comp_type > COMP_NONE && blcp_2nd_header->blcp_2nd_comp_type < COMP_MAX) {
+		image_buf = (void *)(uintptr_t)blcp_2nd_header->blcp_2nd_comp_addr;
+		raw_image_size = blcp_2nd_header->blcp_2nd_comp_size;
 	} else {
-		image_buf = (void *)(uintptr_t)fip_param2.blcp_2nd_runaddr;
-		image_size = fip_param2.blcp_2nd_size;
+		image_buf = (void *)(uintptr_t)blcp_2nd_header->blcp_2nd_runaddr;
+		raw_image_size = blcp_2nd_header->blcp_2nd_size;
 	}
 
-	// fip_param2.blcp_2nd_loadaddr == 0, means didn't build in fip.bin.
-	if (!fip_param2.blcp_2nd_loadaddr) {
-		#ifdef SECOND_OFFSET
-		//reset the loadaddr to SECOND_OFFSET from xmp partitions.
-		fip_param2.blcp_2nd_loadaddr = SECOND_OFFSET;
-		#endif
-		if (p_rom_api.get_boot_src() == BOOT_SRC_EMMC || p_rom_api.get_boot_src() == BOOT_SRC_SPI_NAND)
-			is_read_fip_partition = 0;
-	}
-
-	// load blcp 2nd image from flash to run comp address, and speed up freqency
-
-	ret = load_data_from_storage(image_buf,
-			fip_param2.blcp_2nd_loadaddr,
-			image_size, retry, is_read_fip_partition);
-
+	// load blcp 2nd image from flash to run comp address, and speed up freqencyCVIMMAP_FSBL_C906L_START_ADDR
+	ret = load_data_from_storage(image_buf - header_size,
+				     (blcp_2nd_header->blcp_2nd_loadaddr),
+				     ALIGN_TO_BLOCK_SIZE(raw_image_size + header_size), retry, is_read_fip_partition);
 	if (ret < 0) {
-		ERROR("load data failed! loadaddr:0x%x, size:%d, retry:%d\n",
-			  fip_param2.blcp_2nd_loadaddr, image_size, retry);
+		ERROR("load blcp 2nd failed! loadaddr:0x%lx, size:%d, retry:%d\n",
+		      blcp_2nd_header->blcp_2nd_loadaddr, raw_image_size, retry);
 		return ret;
 	}
 
-	// crc = p_rom_api.image_crc(image_buf, image_size);
-	NOTICE("blcp_2nd_cksum (0x%x/0x%x)\n", p_rom_api.image_crc(image_buf, image_size), fip_param2.blcp_2nd_cksum);
-	// if (crc != fip_param2.blcp_2nd_cksum) {
-	// 	ERROR("blcp_2nd_cksum (0x%x/0x%x)\n", crc, fip_param2.blcp_2nd_cksum);
-	// 	return -1;
-	// }
+	crc = p_rom_api.image_crc(image_buf, raw_image_size);
+	if (crc != blcp_2nd_header->blcp_2nd_cksum) {
+		ERROR("blcp_2nd_cksum (0x%x/0x%x)\n", crc, blcp_2nd_header->blcp_2nd_cksum);
+		for (int i = 0; i <= raw_image_size / sizeof(uint16_t); i++) {
+			if (i == 512) {
+				i = (raw_image_size - 512) / sizeof(uint16_t);
+				printf("\n........................\n");
+			}
+			if (i % 16 == 0) {
+				printf("\n");
+				printf("%p(%lx):\n",
+				       ((uint16_t *)(uintptr_t)image_buf + i), i * sizeof(uint16_t) + header_size);
+			}
+			printf("%04x ", *((uint16_t *)(uintptr_t)image_buf + i));
+		}
+		printf("\n");
+		return -1;
+	}
 
-	// ret = dec_verify_image(image_buf, image_size, 0, fip_param1);
-	// if (ret < 0) {
-	// 	ERROR("verify blcp 2nd (%d)\n", ret);
-	// 	return ret;
-	// }
+	ret = dec_verify_image(image_buf, raw_image_size, 0, fip_param1);
+	if (ret < 0) {
+		ERROR("verify blcp 2nd (%d)\n", ret);
+		return ret;
+	}
 	time_records->load_loader_2nd_end = read_time_ms();
 
 	// if the blcp 2nd image has been compressed, decompressing it.
 	time_records->fsbl_decomp_start = read_time_ms();
-	if (fip_param2.blcp_2nd_comp_type > COMP_NONE &&
-		fip_param2.blcp_2nd_comp_type < COMP_MAX) {
+	if (blcp_2nd_header->blcp_2nd_comp_type > COMP_NONE &&
+		blcp_2nd_header->blcp_2nd_comp_type < COMP_MAX) {
 		size_t dst_size = BLCP_2ND_DECOMP_DST_SIZE;
 
-		ret = decompress((void *)(uintptr_t)fip_param2.blcp_2nd_runaddr,
+		ret = decompress((void *)(uintptr_t)blcp_2nd_header->blcp_2nd_runaddr,
 						&dst_size,
-						(void *)(uintptr_t)fip_param2.blcp_2nd_comp_addr,
-						fip_param2.blcp_2nd_comp_size,
-						fip_param2.blcp_2nd_comp_type);
+						(void *)(uintptr_t)image_buf,
+						blcp_2nd_header->blcp_2nd_comp_size,
+						blcp_2nd_header->blcp_2nd_comp_type);
 		if (ret < 0) {
 			ERROR("Failed to decompress blcp_2nd (%d/%u)\n", ret,
-				fip_param2.blcp_2nd_size);
+				blcp_2nd_header->blcp_2nd_size);
 			return -1;
 		}
-		fip_param2.blcp_2nd_size = dst_size;
+		blcp_2nd_header->blcp_2nd_size = dst_size;
+	} else {
+		blcp_2nd_header->blcp_2nd_runaddr = (uint32_t)(uintptr_t)image_buf;
 	}
-
-	flush_dcache_range(fip_param2.blcp_2nd_runaddr, fip_param2.blcp_2nd_size);
+	flush_dcache_range(blcp_2nd_header->blcp_2nd_runaddr, blcp_2nd_header->blcp_2nd_size);
 
 	rtos_base = mmio_read_32(AXI_SRAM_RTOS_BASE);
 	init_comm_info();
@@ -472,9 +519,9 @@ int load_blcp_2nd(int retry)
 	default:
 		time_records->release_blcp_2nd = read_time_ms();
 		if (rtos_base == CVI_RTOS_MAGIC_CODE)
-			mmio_write_32(AXI_SRAM_RTOS_BASE, fip_param2.blcp_2nd_runaddr);
+			mmio_write_32(AXI_SRAM_RTOS_BASE, blcp_2nd_header->blcp_2nd_runaddr);
 		else
-			reset_c906l(fip_param2.blcp_2nd_runaddr);
+			reset_c906l(blcp_2nd_header->blcp_2nd_runaddr);
 	}
 	NOTICE("C2E.\n");
 	return 0;
@@ -518,7 +565,7 @@ int load_monitor(int retry, uint64_t *monitor_entry)
 					 fip_param2.monitor_size, retry, 1);
 #endif
 	if (ret < 0) {
-		ERROR("load data failed! loadaddr:0x%lx, size:%d, retry:%d\n",
+		ERROR("load monitor failed! loadaddr:0x%lx, size:%d, retry:%d\n",
 			  fip_param2.monitor_loadaddr, fip_param2.monitor_size, retry);
 		return ret;
 	}
@@ -580,8 +627,8 @@ int load_bl32(int retry)
 					 fip_param2.bl32_size, retry, 1);
 #endif
 	if (ret < 0) {
-		ERROR("load data failed! loadaddr:0x%lx, size:%d, retry:%d\n",
-			  fip_param2.monitor_loadaddr, fip_param2.monitor_size, retry);
+		ERROR("load bl32 failed! loadaddr:0x%lx, size:%d, retry:%d\n",
+			  fip_param2.bl32_loadaddr, fip_param2.bl32_size, retry);
 		return ret;
 	}
 
@@ -624,8 +671,8 @@ int load_blmcu(int retry)
 					 fip_param2.blmcu_size, retry, 1);
 #endif
 	if (ret < 0) {
-		ERROR("load data failed! loadaddr:0x%lx, size:%d, retry:%d\n",
-			  fip_param2.monitor_loadaddr, fip_param2.monitor_size, retry);
+		ERROR("load blmcu failed! loadaddr:0x%lx, size:%d, retry:%d\n",
+			  fip_param2.blmcu_loadaddr, fip_param2.blmcu_size, retry);
 		return ret;
 	}
 	crc = p_rom_api.image_crc((void *)(uintptr_t)fip_param2.blmcu_runaddr, fip_param2.blmcu_size);
@@ -729,7 +776,7 @@ int load_loader_2nd(int retry, uint64_t *loader_2nd_entry)
 					 BLOCK_SIZE, retry, 1);
 #endif
 	if (ret < 0) {
-		ERROR("load data failed! loadaddr:0x%lx, size:%d, retry:%d\n",
+		ERROR("load loader 2nd header failed! loadaddr:0x%lx, size:%d, retry:%d\n",
 			  fip_param2.loader_2nd_loadaddr, BLOCK_SIZE, retry);
 		return ret;
 	}
@@ -781,7 +828,7 @@ int load_loader_2nd(int retry, uint64_t *loader_2nd_entry)
 					 reading_size, retry, 1);
 #endif
 	if (ret < 0) {
-		ERROR("load data failed! loadaddr:0x%lx, size:%d, retry:%d\n",
+		ERROR("load loader 2nd failed! loadaddr:0x%lx, size:%d, retry:%d\n",
 			  fip_param2.loader_2nd_loadaddr, reading_size, retry);
 		return ret;
 	}

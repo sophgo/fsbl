@@ -33,9 +33,14 @@ static int spi_nand_set_feature(uint8_t fe, uint8_t val)
 
         mmio_setbits_32(spi_nand_ctrl_base + REG_SPI_NAND_TRX_CTRL0, BIT_REG_TRX_START);
 
-        while(((mmio_read_32(spi_nand_ctrl_base + REG_SPI_NAND_INT) & BIT_REG_TRX_DONE_INT) == 0)
-                && (retry++ < SPI_NAND_INTERRUPT_UDELAY_COUNT))
+        uint32_t dma_retry = 0;
+        while ((mmio_read_32(spi_nand_ctrl_base + REG_SPI_NAND_INT) & BITS_REG_TRX_DMA_DONE_INT) == 0) {
+                if (dma_retry++ > SPI_NAND_INTERRUPT_UDELAY_COUNT) {
+                        ERROR("SPINAND DMA done timeout, %d %s\n", dma_retry, __func__);
+                        return -EIO;
+                }
                 udelay(1);
+        }
 
         if (retry > SPI_NAND_INTERRUPT_UDELAY_COUNT) {
                 ERROR("SPINAND command error, no interrupt, %d %s\n", retry, __func__);
@@ -260,6 +265,9 @@ static int spi_nand_read_from_cache(uint32_t blk_id, uint32_t page_nr, uint32_t 
         uint32_t intr = mmio_read_32(spi_nand_ctrl_base + REG_SPI_NAND_INT);
         mmio_setbits_32(spi_nand_ctrl_base + REG_SPI_NAND_INT_CLR, intr);
 
+        __asm__ volatile("dsb sy" ::: "memory");
+        inv_dcache_range((uintptr_t)buf, len);
+
         return 0;
 }
 
@@ -308,7 +316,7 @@ int get_nand_info(void)
 {
 	uint32_t ret;
 	uint8_t page_buff[4096] = {0};
-	struct fip_param1 *fip_param;
+	struct fip_param1 *fip_param1 = (void *)PARAM1_BASE;
 
 	spinand_info.id = 0x0;
 	spinand_info.page_size = 2048;
@@ -332,20 +340,15 @@ int get_nand_info(void)
 	spinand_info.sample_param = 0x100;
 	spinand_info.xtal_switch = 0;
 
-	ret = cv_spi_nand_read_page_by_row_addr(0, page_buff, 2048);
-	if (ret)
-		ERROR("Scan fip_header fialed!\n");
-
-	fip_param = (void *)(page_buff + sizeof(struct block_header_t));
 	/* update spinand info */
-	memcpy(&spinand_info, &fip_param->nand_info, sizeof(struct spi_nand_info_t));
+	memcpy(&spinand_info, &fip_param1->nand_info, sizeof(struct spi_nand_info_t));
 
 	if (spinand_info.flags & FLAGS_ENABLE_X4_BIT) {
 
 		if (spinand_info.flags & (FLAGS_ENABLE_X4_BIT | FLAGS_SET_QE_BIT))
 			spi_nand_qe_enable();
 
-		ret = cv_spi_nand_read_page_by_row_addr(0, page_buff + 2048, 2048);
+		ret = cv_spi_nand_read_page_by_row_addr(0, page_buff, 4096);
 		if (ret)
 			ERROR("Scan fip_header failed!\n");
 
@@ -399,7 +402,9 @@ uint32_t cv_spi_nand_read_oob(uint32_t row_addr, void *buf)
 static int nand_block_isbad(uint32_t offset)
 {
 	uint32_t read_page = offset / spinand_info.page_size;
-	uint8_t oob_buff[256] = {0};
+        __aligned(64) uint8_t oob_buff[256];
+        memset(oob_buff, 0xff, sizeof(oob_buff));
+
 
 	switch (spinand_info.badblock_pos) {
 	case BBP_LAST_PAGE:

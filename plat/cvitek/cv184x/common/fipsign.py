@@ -3,6 +3,7 @@
 
 import logging
 import argparse
+import os
 from struct import unpack
 
 from Crypto.Cipher import AES
@@ -20,6 +21,8 @@ from fiptool import FIP, IMAGE_ALIGN, init_logging
 ENCRYPTION_KEY_SIZE = 16
 ENCRYPTION_BLOCK_SIZE = 16
 IV_ZERO = b"\0" * ENCRYPTION_BLOCK_SIZE
+YOC_HEADER_SIZE = 512
+YOC_MAGIC = b"YOCB"
 
 
 class SignedFIP(FIP):
@@ -92,6 +95,39 @@ class SignedFIP(FIP):
     def sign_by_bl_priv(self, image):
         digest = SHA256.new(image)
         return pkcs1_15.new(self.bl_priv).sign(digest)
+
+    def embed_external_blcp_2nd(self, fip_path):
+        info = getattr(self, "blcp_2nd_info", None)
+        if not info or info["buildin"]:
+            return
+
+        yoc_path = os.path.join(os.path.dirname(fip_path), "rawimages", "yoc.bin")
+        if not os.path.exists(yoc_path):
+            logging.warning("external yoc.bin is not found")
+            return
+
+        with open(yoc_path, "rb") as fp:
+            yoc_bin = fp.read()
+
+        if yoc_bin[:4] != YOC_MAGIC:
+            raise ValueError("Unknown yoc.bin magic %r" % yoc_bin[:4])
+
+        comp_type = yoc_bin[8:12]
+        comp_size = unpack("<I", yoc_bin[12:16])[0]
+        comp_addr = unpack("<Q", yoc_bin[16:24])[0]
+        size = unpack("<I", yoc_bin[32:36])[0]
+        runaddr = unpack("<Q", yoc_bin[36:44])[0]
+        image_size = size if comp_type == b"BL33" else comp_size
+
+        self.body2["BLCP_2ND"].content = yoc_bin[YOC_HEADER_SIZE : YOC_HEADER_SIZE + image_size]
+        self.blcp_2nd_info = {
+            "is_compressed": comp_type != b"BL33",
+            "comp_type": comp_type,
+            "buildin": True,
+            "runaddr": runaddr,
+            "comp_addr": comp_addr,
+        }
+        logging.info("embed external BLCP_2ND from %s: len=%#x", yoc_path, len(self.body2["BLCP_2ND"].content))
 
     def sign(self):
         logging.info("sign fip.bin")
@@ -201,9 +237,10 @@ def sign_fip(args):
     fip = SignedFIP(args.root_priv, args.bl_priv)
     fip.read_fip(args.SRC_FIP)
 
+    fip.embed_external_blcp_2nd(args.SRC_FIP)
     fip.sign()
 
-    fip_bin = fip.make(sign_flag=True)
+    fip_bin = fip.make()
     fip.print_fip_params()
     with open(args.DEST_FIP, "wb") as fp:
         fp.write(fip_bin)
@@ -215,10 +252,11 @@ def encrypt_fip(args):
     fip = EncryptedFIP(args.root_priv, args.bl_priv, args.ldr_ek, args.bl_ek)
     fip.read_fip(args.SRC_FIP)
 
+    fip.embed_external_blcp_2nd(args.SRC_FIP)
     fip.sign()
     fip.encrypt()
 
-    fip_bin = fip.make(sign_flag=True)
+    fip_bin = fip.make()
     fip.print_fip_params()
     with open(args.DEST_FIP, "wb") as fp:
         fp.write(fip_bin)

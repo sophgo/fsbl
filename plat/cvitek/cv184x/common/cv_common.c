@@ -369,7 +369,8 @@ int plat_cryptodma_do(int isEncrypt, uintptr_t in, uintptr_t out, uint64_t len,
     }
 
     // 对于需要密钥的算法检查密钥
-    if ((a == AES || a == SM4 || a == DES || a == TDES) && (!key || !iv)) {
+    // 使用 OTP 密钥时，key 允许为 NULL
+    if ((a == AES || a == SM4 || a == DES || a == TDES) && ((!key && otp != USE_OTP_KEY) || !iv)) {
 		NOTICE("key or iv is null\n");
         return -1;
     }

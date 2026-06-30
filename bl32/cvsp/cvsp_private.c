@@ -373,7 +373,7 @@ static int cvsp_privte_smc_handler_init(void)
 	}
 
 	if (!ready) {
-		NOTICE("%s()\n", __func__);
+		VERBOSE("%s()\n", __func__);
 
 		mbedtls_init();
 		generic_delay_timer_init();
@@ -413,7 +413,7 @@ bmsp_args_t *cvsp_private_smc_handler(uint64_t func, uint64_t arg1,
 	// uint32_t linear_id = plat_my_core_pos();
 	int ret = 0;
 
-	NOTICE("%s(): linear_id=%u [0x%lx 0x%lx]\n", __func__, plat_my_core_pos(), func,
+	VERBOSE("%s(): linear_id=%u [0x%lx 0x%lx]\n", __func__, plat_my_core_pos(), func,
 	       arg1);
 
 	// Enable SPACC/TRNG clock at Mars3 platform

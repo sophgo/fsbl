@@ -425,8 +425,14 @@ $(eval $(call add_define,OD_CLK_SEL))
 ifeq ($(TPU_OD_CLK_SEL),y)
 $(eval $(call add_define,TPU_OD_CLK_SEL))
 endif
-ifeq ($(CPU_OD_CLK_SEL),y)
-$(eval $(call add_define,CPU_OD_CLK_SEL))
+ifeq ($(CPU_OD_CLK_BIG),y)
+$(eval $(call add_define,CPU_OD_CLK_BIG))
+endif
+ifeq ($(CPU_OD_CLK_1000M),y)
+$(eval $(call add_define,CPU_OD_CLK_1000M))
+endif
+ifeq ($(CPU_OD_CLK_LITTLE),y)
+$(eval $(call add_define,CPU_OD_CLK_LITTLE))
 endif
 endif
 

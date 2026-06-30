@@ -351,13 +351,13 @@ bmsp_args_t *bmsp_smc_handler(uint64_t func, uint64_t arg1, uint64_t arg2,
 	bmsp_stats[linear_id].smc_count++;
 	bmsp_stats[linear_id].eret_count++;
 
-	INFO("BMSP: func=0x%x, arg1=0x%x, arg2=0x%x, arg3=0x%x, arg4=0x%x,arg5=0x%x,arg6=0x%x,arg7=0x%x\n",
+	VERBOSE("BMSP: func=0x%x, arg1=0x%x, arg2=0x%x, arg3=0x%x, arg4=0x%x,arg5=0x%x,arg6=0x%x,arg7=0x%x\n",
 	     (uint32_t)func, (uint32_t)arg1, (uint32_t)arg2, (uint32_t)arg3,
 	     (uint32_t)arg4, (uint32_t)arg5, (uint32_t)arg6, (uint32_t)arg7);
 
-	INFO("BMSP: cpu 0x%lx received %s smc 0x%lx\n", read_mpidr(),
+	VERBOSE("BMSP: cpu 0x%lx received %s smc 0x%lx\n", read_mpidr(),
 	     ((func >> 31) & 1) == 1 ? "fast" : "yielding", func);
-	INFO("BMSP: cpu 0x%lx: %d smcs, %d erets\n", read_mpidr(),
+	VERBOSE("BMSP: cpu 0x%lx: %d smcs, %d erets\n", read_mpidr(),
 	     bmsp_stats[linear_id].smc_count, bmsp_stats[linear_id].eret_count);
 
 	/* Render secure services and obtain results here */

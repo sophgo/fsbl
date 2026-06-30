@@ -192,10 +192,10 @@ class FIP:
             Entry.make("BLCP_2ND_CKSUM", 4, int),
             Entry.make("BLCP_2ND_COMP_TYPE", 4, int),
             Entry.make("BLCP_2ND_COMP_SIZE", 4, int),
-            Entry.make("BLCP_2ND_COMP_ADDR", 4, int),
-            Entry.make("BLCP_2ND_LOADADDR", 4, int),
+            Entry.make("BLCP_2ND_COMP_ADDR", 8, int),
+            Entry.make("BLCP_2ND_LOADADDR", 8, int),
             Entry.make("BLCP_2ND_SIZE", 4, int),
-            Entry.make("BLCP_2ND_RUNADDR", 4, int),
+            Entry.make("BLCP_2ND_RUNADDR", 8, int),
             # ATF-BL31 or OpenSBI
             Entry.make("MONITOR_CKSUM", 4, int),
             Entry.make("MONITOR_LOADADDR", 8, int),
@@ -222,7 +222,7 @@ class FIP:
             Entry.make("LOADER_2ND_B_SIZE", 4, int),
             Entry.make("LOADER_2ND_B_RESERVED2", 4, int),
             # Reserved
-            Entry.make("RESERVED_LAST", 4096 - (16 + 4*8 + 7*4 + 24*4), bytes),
+            Entry.make("RESERVED_LAST", 4096 - (16 + 4 * 8 + 10 * 4 + 24 * 4), bytes),
         ]
     )
 
@@ -390,8 +390,11 @@ class FIP:
             loadaddr = self.param2["BLCP_2ND_LOADADDR"].toint()
             size = self.param2["BLCP_2ND_COMP_SIZE"].toint()
             logging.debug(f"Reading BLCP_2ND (compressed): loadaddr=0x{loadaddr:x}, size=0x{size:x}")
-            self.body2["BLCP_2ND"].content = fip_bin[loadaddr : loadaddr + size]
-            self.read_end = max(self.read_end, loadaddr + size)
+            if loadaddr > 0:
+                self.body2["BLCP_2ND"].content = fip_bin[loadaddr : loadaddr + size]
+                self.read_end = max(self.read_end, loadaddr + size)
+            else:
+                self.body2["BLCP_2ND"].content = b""
             self.blcp_2nd_info = {
                 'is_compressed': True,
                 'comp_type': self.param2["BLCP_2ND_COMP_TYPE"].content,
@@ -403,8 +406,11 @@ class FIP:
             loadaddr = self.param2["BLCP_2ND_LOADADDR"].toint()
             size = self.param2["BLCP_2ND_SIZE"].toint()
             logging.debug(f"Reading BLCP_2ND (uncompressed): loadaddr=0x{loadaddr:x}, size=0x{size:x}")
-            self.body2["BLCP_2ND"].content = fip_bin[loadaddr : loadaddr + size]
-            self.read_end = max(self.read_end, loadaddr + size)
+            if loadaddr > 0:
+                self.body2["BLCP_2ND"].content = fip_bin[loadaddr : loadaddr + size]
+                self.read_end = max(self.read_end, loadaddr + size)
+            else:
+                self.body2["BLCP_2ND"].content = b""
             self.blcp_2nd_info = {
                 'is_compressed': False,
                 'comp_type': LOADER_2ND_MAGIC_ORIG,
@@ -953,7 +959,9 @@ class FIP:
                             name, len(entry.content), entry.content[:16].hex())
         
         # Append rest_fip if it exists (for signing/encryption mode)
-        if getattr(self, "rest_fip", None) and self.blcp_2nd_info.buildin=="y":
+        blcp_2nd_info = getattr(self, "blcp_2nd_info", None)
+        blcp_2nd_buildin = blcp_2nd_info.get("buildin") if blcp_2nd_info else False
+        if getattr(self, "rest_fip", None) and blcp_2nd_buildin:
             logging.info("Appending rest_fip: %#x bytes", len(self.rest_fip))
             fip_bin += self.rest_fip
         elif getattr(self, "rest_fip", None):

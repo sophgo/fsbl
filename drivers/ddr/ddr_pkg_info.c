@@ -29,6 +29,12 @@ void read_ddr_pkg_info(void)
 	NOTICE("pkg_type=%x\n", pkg_type);
 
 	switch (pkg_type) {
+	case 0x0: //2nd src need to read from efuse
+		NOTICE("2nd\n");
+		ddr_vendor = FIELD_GET(efuse_leakage, 25, 21);
+		ddr_capacity = FIELD_GET(efuse_leakage, 28, 26);
+		pkg = FIELD_GET(efuse_leakage, 31, 29);
+		break;
 	case 0x1: //BGA 10x10, SIP 4Gb DDR3
 		ddr_vendor = DDR_VENDOR_NY_4G;
 		ddr_capacity = DDR_CAPACITY_4G;
@@ -88,6 +94,20 @@ void read_ddr_pkg_info(void)
 	}
 
 	NOTICE("D%x_%x_%x\n", pkg, ddr_capacity, ddr_vendor);
+
+	// 2nd source: ddr_type determined by vendor read from efuse
+	if (pkg_type == 0x0) {
+		switch (ddr_vendor) {
+		case DDR_VENDOR_ESMT_512M_DDR2:
+		case DDR_VENDOR_ETRON_512M_DDR2:
+		case DDR_VENDOR_UNILC_N25_512M_DDR2:
+			ddr_type = DDR_TYPE_DDR2;
+			break;
+		default:
+			ddr_type = DDR_TYPE_DDR3;
+			break;
+		}
+	}
 
 	//if onebin, need to set datarate here
 
