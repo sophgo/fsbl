@@ -776,7 +776,7 @@ retry_from_flash:
 		}
 	}
 
-	otp_enter_power_save_mode();
+	//otp_enter_power_save_mode();
 
 	sync_cache();
 	console_flush();
