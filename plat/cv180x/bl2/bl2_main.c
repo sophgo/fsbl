@@ -4,6 +4,7 @@
 #include <bl2.h>
 #include <string.h>
 #include <delay_timer.h>
+#include <rom_api.h>
 
 enum CHIP_CLK_MODE chip_clk_mode = CLK_ND;
 
@@ -50,6 +51,9 @@ int dec_verify_image(const void *image, size_t size, size_t dec_skip, struct fip
 
 void bl2_main(void)
 {
+	if (p_rom_api_get_boot_src() != BOOT_SRC_UART)
+		console_init(0, PLAT_UART_CLK_IN_HZ, PLAT_CONSOLE_BAUDRATE);
+
 	ATF_STATE = ATF_STATE_BL2_MAIN;
 	time_records->fsbl_start = read_time_ms();
 
